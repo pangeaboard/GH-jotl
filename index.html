@@ -2596,6 +2596,10 @@ function showFinalClearAlert(id) {
     const activeChars = Object.keys(charData).filter(j => charData[j].playerName && charData[j].playerName.trim() !== "");
 
     console.log(`--- [시나리오 #${id}] 정산 시작 ---`);
+    
+    // 알림창에 상세 내역을 띄우기 위한 변수 추가
+    let rewardSummary = "🎊 모든 보상이 캐릭터에게 지급되었습니다.<br>";
+    let treasureSummary = "";
 
     // --- 1. 시나리오 공통 보상 정산 ---
     const rGold = s.reward.match(/(\d+)(?:골드|G)/i);
@@ -2630,15 +2634,18 @@ function showFinalClearAlert(id) {
         s.treasure.forEach(t => {
             if (t.owner && t.owner !== "미획득" && charData[t.owner]) {
                 const tChar = charData[t.owner];
-                const tText = String(t.content); // 숫자인 경우 대비 문자열 변환
+                const tText = String(t.content); 
                 
                 console.log(`보물상자 #${t.id} 지급 대상: ${t.owner}`);
+                
+                // 알림창에 표시할 보물 정보 수집
+                treasureSummary += `<div style="color:#ffd700; font-size:0.8rem;">🎁 [상자 #${t.id}] ${t.owner}: ${t.content}</div>`;
                 
                 // 보물상자 골드
                 const tGold = tText.match(/(\d+)(?:골드|G)/i);
                 if (tGold) tChar.gold += parseInt(tGold[1]);
                 
-                // 보물상자 코인 (🪙x3 또는 🪙🪙🪙)
+                // 보물상자 코인
                 const tCoinMatch = tText.match(/🪙[xX*]?(\d+)/);
                 if (tCoinMatch) {
                     tChar.gold += (parseInt(tCoinMatch[1]) * 2);
@@ -2665,7 +2672,6 @@ function showFinalClearAlert(id) {
         });
     }
 
-    // [내부 함수] 아이템 추가 로직
     function addItemToChar(job, itemId) {
         const idNum = Number(itemId);
         if (!charData[job].inventory) charData[job].inventory = [];
@@ -2676,6 +2682,17 @@ function showFinalClearAlert(id) {
     }
 
     // --- 4. 데이터 저장 및 UI 즉시 반영 ---
+    
+    // [중요] 알림창 내용을 먼저 구성 (보물상자 요약 포함)
+    if (treasureSummary) {
+        rewardSummary += `<div style="margin-top:8px; border-top:1px solid #555; padding-top:5px;">${treasureSummary}</div>`;
+    }
+    
+    document.getElementById('alert-title').innerText = `SCENARIO #${id} CLEAR`;
+    document.getElementById('alert-msg').innerHTML = rewardSummary;
+    document.getElementById('modal-common-alert').classList.remove('hidden');
+
+    // 그 다음 저장 (saveAllData 내부에서 파이어베이스 전송이 일어나야 함)
     saveAllData();
     renderScenarios();
 
@@ -2689,7 +2706,7 @@ function showFinalClearAlert(id) {
         const pDisp = document.getElementById('display-perk-points') || 
                       document.getElementById('perk-points-display') || 
                       document.getElementById('perk-count');
-        if (pDisp) pDisp.innerText = c.perkPoints;
+        if (pDisp) pDisp.innerText = c.perkPoints || 0;
 
         if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
         if (typeof updateExpBar === 'function') updateExpBar();
@@ -2698,11 +2715,6 @@ function showFinalClearAlert(id) {
     if (typeof renderBagItems === 'function') renderBagItems('전체');
     if (typeof renderShopItems === 'function') renderShopItems('전체');
 
-    // 최종 알림 모달
-    document.getElementById('alert-title').innerText = `SCENARIO #${id} CLEAR`;
-    document.getElementById('alert-msg').innerHTML = `🎊 모든 보상이 캐릭터에게 지급되었습니다.<br><span style="color:#aaa; font-size:0.85rem;">(공통 보상 및 획득한 모든 보물 포함)</span>`;
-    document.getElementById('modal-common-alert').classList.remove('hidden');
-    
     console.log(`--- 정산 완료 ---`);
 }
 
@@ -2898,24 +2910,25 @@ function closeRewardModal() {
 }
 
 function saveAllData() {
-    // 1. 현재 선택된 파티가 있는지 확인
     if (currentPartyIndex !== null && parties[currentPartyIndex]) {
-        
-        // 2. 현재 작업 중인 모든 실시간 데이터를 해당 파티 객체에 업데이트
+        // 1. 로컬 변수 데이터 동기화
         parties[currentPartyIndex].characters = charData;
         parties[currentPartyIndex].scenarios = scenarios;
-        
-        // 만약 아이템 데이터도 파티별로 관리한다면 아래 줄도 포함
         parties[currentPartyIndex].unlockedItemIds = unlockedItemIds;
 
-        // 3. 수정된 전체 파티 목록을 로컬스토리지에 저장 (통합 저장)
+        // 2. 브라우저 백업 (기존 로직)
         localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
+
+        // 3. [추가] 실시간 서버(Firebase) 저장 -> 이 코드가 있어야 다른 기기에서 보임
+        if (typeof database !== 'undefined') {
+            database.ref('parties/' + currentPartyIndex).set(parties[currentPartyIndex])
+                .then(() => console.log("서버 동기화 성공!"))
+                .catch((error) => console.error("서버 저장 실패:", error));
+        }
         
-        console.log(`[${parties[currentPartyIndex].partyName}] 파티의 모든 데이터가 통합 저장되었습니다.`);
+        console.log(`[${parties[currentPartyIndex].partyName}] 파티 데이터 통합 저장됨.`);
     } else {
-        // 파티 선택 없이 저장될 경우를 대비한 기존 로직 (안전장치)
         localStorage.setItem('gloomhaven_scenarios', JSON.stringify(scenarios));
-        localStorage.setItem('gloomhaven_unlocked_items', JSON.stringify(unlockedItemIds));
     }
 }
 // [1. 데이터 초기화] 카드 범위를 1~22로 강제 제한
