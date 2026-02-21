@@ -3129,49 +3129,55 @@ function openCityEventMode() {
 
 window.onload = function() {
     database.ref('parties/').on('value', function(snapshot) {
-        // [수정] 내가 방금 저장한 데이터가 서버를 거쳐 다시 돌아온 것이라면 UI 갱신을 스킵
-        if (isLocalUpdate) {
-            console.log("로컬 업데이트 중... 서버 수신 데이터 무시.");
+        // [수정] 로컬에서 내가 직접 수정 중일 때는 서버 신호를 무시 (충돌 방지)
+        if (typeof isLocalUpdate !== 'undefined' && isLocalUpdate) {
+            console.log("로컬 업데이트 중... 서버 데이터 무시.");
             return;
         }
 
         const data = snapshot.val();
-        if (data) {
-            parties = data;
-            console.log("서버와 실시간 동기화 중...");
-            
-            // 1. 파티 목록 화면 갱신
-            renderPartyList(); 
-            
-            // 2. 현재 파티를 플레이 중이라면 내부 데이터와 UI 업데이트
-            if (currentPartyIndex !== null && parties[currentPartyIndex]) {
-                charData = parties[currentPartyIndex].characters;
-                scenarios = parties[currentPartyIndex].scenarios;
-                
-                // ★ 핵심: UI 갱신 코드 추가 (직업 카드들의 이름을 다시 그립니다)
-                Object.keys(charData).forEach(job => {
-                    if (typeof syncJobCard === 'function') {
-                        syncJobCard(job);
-                    }
-                });
-
-                // 시나리오 목록 갱신
-                if (typeof renderScenarios === 'function') renderScenarios();
-                
-                // 만약 현재 특혜(Perk) 팝업이나 상세 시트가 열려있다면 그것도 갱신
-                if (typeof renderPerkList === 'function' && currentJob) {
-                     renderPerkList(); 
-                }
-            }
+        
+        // [핵심 수정] 서버에 데이터가 없거나 비어있다면 로컬 변수도 즉시 비워야 함
+        if (!data) {
+            console.log("서버 데이터가 비어있습니다. 로컬 데이터를 초기화합니다.");
+            parties = []; 
         } else {
-            console.log("서버에 데이터가 없습니다.");
-            if (parties.length === 0) {
-                parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
-                renderPartyList();
+            // 서버에 데이터가 있다면 배열 형태로 변환하여 저장
+            // (Firebase는 인덱스가 0부터 시작하면 배열로 주지만, 아닐 경우 객체로 줄 때가 있음)
+            parties = Array.isArray(data) ? data : Object.values(data);
+            console.log("서버와 실시간 동기화 완료. 현재 파티 수:", parties.length);
+        }
+
+        // 1. 파티 목록 화면 즉시 갱신 (삭제된 파티가 목록에서 사라짐)
+        if (typeof renderPartyList === 'function') renderPartyList(); 
+
+        // 2. 현재 플레이 중인 파티가 서버 데이터에도 여전히 존재하는지 확인
+        if (currentPartyIndex !== null) {
+            if (!parties[currentPartyIndex]) {
+                // [중요] 내가 있던 파티가 서버에서 삭제되었다면 강제로 목록으로 튕겨냄
+                console.warn("현재 파티가 서버에서 삭제되었습니다. 초기 화면으로 이동합니다.");
+                currentPartyIndex = null;
+                charData = {};
+                scenarios = {};
+                if (typeof showScreen === 'function') showScreen('screen-party-select'); 
+            } else {
+                // 파티가 존재한다면 데이터 동기화
+                charData = parties[currentPartyIndex].characters || {};
+                scenarios = parties[currentPartyIndex].scenarios || {};
+                
+                // UI 갱신
+                Object.keys(charData).forEach(job => {
+                    if (typeof syncJobCard === 'function') syncJobCard(job);
+                });
+                if (typeof renderScenarios === 'function') renderScenarios();
             }
         }
+
+        // 로컬 백업 업데이트
+        localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
+
     }, function(error) {
-        console.error("데이터 읽기 실패:", error);
+        console.error("서버 데이터 읽기 실패:", error);
     });
 };
 
