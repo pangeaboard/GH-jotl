@@ -1595,72 +1595,49 @@ currentJob = job;
             closeModal('modal-char-sheet');
         }
 
+// [수정] 함수 선언부와 시작 중괄호({)를 명확히 추가했습니다.
 function addStatOnBlur(type) {
     if (!currentJob || !charData[currentJob]) return;
 
-    // 1. 입력 요소 찾기
     const addInput = document.getElementById(`add-${type}-input`);
     const totalInput = document.getElementById(`input-${type}`);
     
     if (!addInput || !addInput.value) return;
 
-    // 2. 숫자 계산
     const addValue = parseInt(addInput.value) || 0;
     if (addValue === 0) {
         addInput.value = "";
         return;
     }
 
-    // 3. 데이터 업데이트
-    if (type === 'gold') {
-        charData[currentJob].gold = (charData[currentJob].gold || 0) + addValue;
-        if (totalInput) totalInput.value = charData[currentJob].gold;
-    } else if (type === 'exp') {
-        charData[currentJob].exp = (charData[currentJob].exp || 0) + addValue;
-        if (totalInput) totalInput.value = charData[currentJob].exp;
-    }
+    // 데이터 계산 및 저장
+    const currentVal = charData[currentJob][type] || 0;
+    const newTotal = currentVal + addValue;
+    charData[currentJob][type] = newTotal;
 
-    // 4. 입력창 초기화
-    addInput.value = "";
-
-    // 5. [핵심] UI 반영 및 서버 전송
-    if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
-    if (typeof updateExpBar === 'function') updateExpBar();
-    
-    // ★ 이 줄이 있어야 다른 기기에 즉시 나타납니다!
-    saveAllData(); 
-}
-
-    // 2. 합산 로직 실행
-    const currentTotal = parseInt(totalInput.value) || 0;
-    const newTotal = currentTotal + addValue;
-
-    if (type === 'exp') {
-        if (typeof handleExpInput === 'function') handleExpInput(newTotal);
-        showAlert("경험치 합산", `총 <b class="highlight-reward">${newTotal} EXP</b>가 되었습니다.`);
-    } else {
-        if (typeof saveGold === 'function') saveGold(newTotal);
-        showAlert("골드 합산", `총 <b style="color:#ffd700">${newTotal}G</b>가 되었습니다.`);
-    }
-
-    // 3. UI 정리 및 저장
-    totalInput.value = newTotal;
-    addInput.value = ''; // 다음 입력을 위해 비워줌
+    // UI 업데이트
+    if (totalInput) totalInput.value = newTotal;
+    addInput.value = ''; 
     
     if (type === 'gold') {
         document.querySelectorAll('.current-gold-display').forEach(el => el.innerText = newTotal);
     }
     
+    // 서버 저장
     if (typeof saveAllData === 'function') saveAllData();
-}
+} // <--- 이 닫기 중괄호와 짝이 맞는 시작 부분이 위쪽에 생겼으므로 에러가 사라집니다.
 
-// 초기화 시 모든 'add' 입력칸을 강제로 비우는 코드 추가 (파일 열 때 실행됨)
+// 초기화 시 모든 'add' 입력칸을 강제로 비우는 코드
 window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('add-exp-input').value = '';
-    document.getElementById('add-gold-input').value = '';
+    const expIn = document.getElementById('add-exp-input');
+    const goldIn = document.getElementById('add-gold-input');
+    if (expIn) expIn.value = '';
+    if (goldIn) goldIn.value = '';
 });
+
 // [통합] 골드 표시 업데이트 함수
 function updateGoldDisplay() {
+    if (!currentJob || !charData[currentJob]) return;
     const gold = charData[currentJob].gold || 0;
     document.querySelectorAll('.current-gold-display').forEach(el => {
         el.innerText = gold;
