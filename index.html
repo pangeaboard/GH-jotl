@@ -2527,8 +2527,8 @@ function processClear(id) {
 
  // [3. 체크 B] 보물 상자 연쇄 소유주 결정 (메시지 수정)
     if (Array.isArray(s.treasure)) {
-        const pendingTreasure = s.treasure.find(t => t.owner === null);
         
+        const pendingTreasure = s.treasure.find(t => !t.owner || t.owner === null);
         if (pendingTreasure) {
             const boxTitle = pendingTreasure.id ? `보물상자 #${pendingTreasure.id}` : `숨겨진 보물`;
             
@@ -2580,7 +2580,7 @@ function processClear(id) {
             skipBtn.innerText = "획득 포기";
             skipBtn.onclick = () => { 
                 // 현재 주인이 없는 첫 번째 상자를 찾아 '미획득' 처리
-                const currentTreasure = s.treasure.find(t => t.owner === null);
+                const currentTreasure = s.treasure.find(t => !t.owner || t.owner === null);
                 if (currentTreasure) currentTreasure.owner = "미획득"; 
                 closeModal('modal-trade-select'); 
                 setTimeout(() => processClear(scenarioId), 100); 
