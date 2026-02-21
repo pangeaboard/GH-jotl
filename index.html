@@ -2362,6 +2362,10 @@ function renderScenarios() {
 
     Object.keys(scenarios).forEach(id => {
         const s = scenarios[id];
+	if (!s || typeof s !== 'object' || !s.state) {
+            console.warn(`시나리오 #${id}의 데이터가 없거나 형식이 잘못되었습니다.`);
+            return; 
+        }
         const card = document.createElement('div');
         
         const isDone = s.state === 'completed';
