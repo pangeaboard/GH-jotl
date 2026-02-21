@@ -1716,24 +1716,48 @@ function processItemAction(type) {
     const gold = charData[currentJob].gold || 0;
     const itemId = Number(selectedItem.id);
     
+    // 1. 골드 체크 및 차감
     if (type === 'buy') {
         if (gold < selectedItem.price) {
-            alert("골드가 부족합니다!");
+            if (typeof showAlert === 'function') {
+                showAlert("골드 부족", "구매에 필요한 골드가 부족합니다!");
+            } else {
+                alert("골드가 부족합니다!");
+            }
             return;
         }
         charData[currentJob].gold -= selectedItem.price;
     }
 
-    // [수정] 인벤토리에만 추가
+    // 2. 인벤토리 데이터 수정
     if (!charData[currentJob].inventory) charData[currentJob].inventory = [];
     if (!charData[currentJob].inventory.includes(itemId)) {
         charData[currentJob].inventory.push(itemId);
     }
 
+    // 3. [동기화 핵심] 전체 파티 구조에 현재 수정된 charData 반영
+    if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+        parties[currentPartyIndex].characters = charData;
+    }
+
+    // 4. [가장 중요] 서버 저장 함수 호출 (이게 있어야 실시간 동기화가 일어납니다)
+    if (typeof saveAllData === 'function') {
+        saveAllData();
+        console.log(`🔥 아이템 ${type === 'buy' ? '구매' : '획득'} 서버 전송 완료`);
+    }
+
+    // 5. UI 갱신 및 알림
     document.getElementById('input-gold').value = charData[currentJob].gold;
     updateGoldDisplay();
-    renderShopItems();
+    
+    if (typeof renderShopItems === 'function') renderShopItems('전체');
+    if (typeof renderBagItems === 'function') renderBagItems('전체'); // 내 가방도 갱신
+    
     closeModal('modal-item-action');
+
+    if (type === 'buy' && typeof showAlert === 'function') {
+        showAlert("구매 성공", `[#${itemId}] ${selectedItem.name}을(를) 구매했습니다!`);
+    }
 }
 
 // 판매 실행
