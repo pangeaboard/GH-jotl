@@ -1596,18 +1596,40 @@ currentJob = job;
         }
 
 function addStatOnBlur(type) {
-    const totalInput = document.getElementById(`input-${type}`);
-    const addInput = document.getElementById(`add-${type}-input`);
-    
-    // 1. 실제로 사용자가 입력한 값인지 확인 (포커스 여부와 무관하게 값이 비어있으면 즉시 종료)
-    const rawValue = addInput.value;
-    if (rawValue === "" || rawValue === null) return; 
+    if (!currentJob || !charData[currentJob]) return;
 
-    const addValue = parseInt(rawValue);
-    if (isNaN(addValue) || addValue === 0) {
-        addInput.value = '';
+    // 1. 입력 요소 찾기
+    const addInput = document.getElementById(`add-${type}-input`);
+    const totalInput = document.getElementById(`input-${type}`);
+    
+    if (!addInput || !addInput.value) return;
+
+    // 2. 숫자 계산
+    const addValue = parseInt(addInput.value) || 0;
+    if (addValue === 0) {
+        addInput.value = "";
         return;
     }
+
+    // 3. 데이터 업데이트
+    if (type === 'gold') {
+        charData[currentJob].gold = (charData[currentJob].gold || 0) + addValue;
+        if (totalInput) totalInput.value = charData[currentJob].gold;
+    } else if (type === 'exp') {
+        charData[currentJob].exp = (charData[currentJob].exp || 0) + addValue;
+        if (totalInput) totalInput.value = charData[currentJob].exp;
+    }
+
+    // 4. 입력창 초기화
+    addInput.value = "";
+
+    // 5. [핵심] UI 반영 및 서버 전송
+    if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
+    if (typeof updateExpBar === 'function') updateExpBar();
+    
+    // ★ 이 줄이 있어야 다른 기기에 즉시 나타납니다!
+    saveAllData(); 
+}
 
     // 2. 합산 로직 실행
     const currentTotal = parseInt(totalInput.value) || 0;
@@ -3129,55 +3151,50 @@ function openCityEventMode() {
 
 window.onload = function() {
     database.ref('parties/').on('value', function(snapshot) {
-        // [수정] 로컬에서 내가 직접 수정 중일 때는 서버 신호를 무시 (충돌 방지)
-        if (typeof isLocalUpdate !== 'undefined' && isLocalUpdate) {
-            console.log("로컬 업데이트 중... 서버 데이터 무시.");
-            return;
-        }
+        if (typeof isLocalUpdate !== 'undefined' && isLocalUpdate) return;
 
         const data = snapshot.val();
-        
-        // [핵심 수정] 서버에 데이터가 없거나 비어있다면 로컬 변수도 즉시 비워야 함
         if (!data) {
-            console.log("서버 데이터가 비어있습니다. 로컬 데이터를 초기화합니다.");
             parties = []; 
         } else {
-            // 서버에 데이터가 있다면 배열 형태로 변환하여 저장
-            // (Firebase는 인덱스가 0부터 시작하면 배열로 주지만, 아닐 경우 객체로 줄 때가 있음)
             parties = Array.isArray(data) ? data : Object.values(data);
-            console.log("서버와 실시간 동기화 완료. 현재 파티 수:", parties.length);
         }
 
-        // 1. 파티 목록 화면 즉시 갱신 (삭제된 파티가 목록에서 사라짐)
         if (typeof renderPartyList === 'function') renderPartyList(); 
 
-        // 2. 현재 플레이 중인 파티가 서버 데이터에도 여전히 존재하는지 확인
-        if (currentPartyIndex !== null) {
-            if (!parties[currentPartyIndex]) {
-                // [중요] 내가 있던 파티가 서버에서 삭제되었다면 강제로 목록으로 튕겨냄
-                console.warn("현재 파티가 서버에서 삭제되었습니다. 초기 화면으로 이동합니다.");
-                currentPartyIndex = null;
-                charData = {};
-                scenarios = {};
-                if (typeof showScreen === 'function') showScreen('screen-party-select'); 
-            } else {
-                // 파티가 존재한다면 데이터 동기화
-                charData = parties[currentPartyIndex].characters || {};
-                scenarios = parties[currentPartyIndex].scenarios || {};
+        if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+            charData = parties[currentPartyIndex].characters || {};
+            scenarios = parties[currentPartyIndex].scenarios || {};
+            
+            // 1. 캐릭터 카드 UI 갱신 (메인 화면)
+            Object.keys(charData).forEach(job => {
+                if (typeof syncJobCard === 'function') syncJobCard(job);
+            });
+
+            // 2. [추가] 현재 "상세 시트"가 열려있다면, 입력창 값들도 실시간 갱신
+            // 폰에서 보고 있을 때 컴퓨터에서 골드를 바꾸면 폰 화면의 숫자가 실시간으로 바뀝니다.
+            if (typeof currentJob !== 'undefined' && currentJob && charData[currentJob]) {
+                const c = charData[currentJob];
                 
-                // UI 갱신
-                Object.keys(charData).forEach(job => {
-                    if (typeof syncJobCard === 'function') syncJobCard(job);
-                });
-                if (typeof renderScenarios === 'function') renderScenarios();
+                // 골드, 경험치 입력창 찾기
+                const gIn = document.getElementById('gold-input') || document.getElementById('input-gold');
+                const eIn = document.getElementById('exp-input') || document.getElementById('input-exp');
+                const pDisp = document.getElementById('perk-count') || document.getElementById('display-perk-points');
+
+                if (gIn && document.activeElement !== gIn) gIn.value = c.gold || 0;
+                if (eIn && document.activeElement !== eIn) eIn.value = c.exp || 0;
+                if (pDisp) pDisp.innerText = c.perkPoints || 0;
+
+                // 관련 UI(골드바, 경험치바 등) 업데이트 함수 호출
+                if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
+                if (typeof updateExpBar === 'function') updateExpBar();
+                if (typeof renderBagItems === 'function') renderBagItems('전체');
             }
+
+            if (typeof renderScenarios === 'function') renderScenarios();
         }
 
-        // 로컬 백업 업데이트
         localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
-
-    }, function(error) {
-        console.error("서버 데이터 읽기 실패:", error);
     });
 };
 
