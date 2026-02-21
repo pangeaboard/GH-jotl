@@ -1187,6 +1187,8 @@ let scenarios = {
         let currentJob = '';
 	let parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
 	let currentPartyIndex = null; 
+	let isLocalUpdate = false; 
+
 
 // [통합 및 수정된 파티 생성 함수]
 function confirmPartyName() {
@@ -2482,6 +2484,9 @@ function confirmClear(id) {
 
 function processClear(id) {
     const s = scenarios[id];
+    console.log("시나리오 데이터:", s);
+    console.log("보물상자 데이터:", s.treasure);
+    console.log("보물상자 타입:", typeof s.treasure, "배열여부:", Array.isArray(s.treasure));
     if (!s) return;
 
     // [1. 상태 변경 및 해금/잠금] 기존 로직 유지
@@ -2911,6 +2916,9 @@ function closeRewardModal() {
 
 function saveAllData() {
     if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+        // [수정] 로컬 업데이트 시작됨을 표시
+        isLocalUpdate = true;
+
         // 1. 로컬 변수 데이터 동기화
         parties[currentPartyIndex].characters = charData;
         parties[currentPartyIndex].scenarios = scenarios;
@@ -2919,11 +2927,18 @@ function saveAllData() {
         // 2. 브라우저 백업 (기존 로직)
         localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
 
-        // 3. [추가] 실시간 서버(Firebase) 저장 -> 이 코드가 있어야 다른 기기에서 보임
+        // 3. [추가] 실시간 서버(Firebase) 저장
         if (typeof database !== 'undefined') {
             database.ref('parties/' + currentPartyIndex).set(parties[currentPartyIndex])
-                .then(() => console.log("서버 동기화 성공!"))
-                .catch((error) => console.error("서버 저장 실패:", error));
+                .then(() => {
+                    console.log("서버 동기화 성공!");
+                    // [수정] 저장이 완료되고 서버 응답을 받은 후, 잠시 뒤에 플래그 해제
+                    setTimeout(() => { isLocalUpdate = false; }, 500);
+                })
+                .catch((error) => {
+                    console.error("서버 저장 실패:", error);
+                    isLocalUpdate = false;
+                });
         }
         
         console.log(`[${parties[currentPartyIndex].partyName}] 파티 데이터 통합 저장됨.`);
@@ -2931,6 +2946,8 @@ function saveAllData() {
         localStorage.setItem('gloomhaven_scenarios', JSON.stringify(scenarios));
     }
 }
+
+
 // [1. 데이터 초기화] 카드 범위를 1~22로 강제 제한
 let cityEventState = (function() {
     const saved = JSON.parse(localStorage.getItem('cityEventState')) || {};
@@ -3083,6 +3100,12 @@ function openCityEventMode() {
 
 window.onload = function() {
     database.ref('parties/').on('value', function(snapshot) {
+        // [수정] 내가 방금 저장한 데이터가 서버를 거쳐 다시 돌아온 것이라면 UI 갱신을 스킵
+        if (isLocalUpdate) {
+            console.log("로컬 업데이트 중... 서버 수신 데이터 무시.");
+            return;
+        }
+
         const data = snapshot.val();
         if (data) {
             parties = data;
