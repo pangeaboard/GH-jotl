@@ -1625,7 +1625,7 @@ function addStatOnBlur(type) {
     
     // 서버 저장
     if (typeof saveAllData === 'function') saveAllData();
-} // <--- 이 닫기 중괄호와 짝이 맞는 시작 부분이 위쪽에 생겼으므로 에러가 사라집니다.
+} 
 
 // 초기화 시 모든 'add' 입력칸을 강제로 비우는 코드
 window.addEventListener('DOMContentLoaded', () => {
@@ -2131,17 +2131,15 @@ function renderBattleGoals() {
         box.onclick = () => {
             job.battleGoals[i] = !job.battleGoals[i];
             
-            // 3개 모두 달성 여부 확인
             if (job.battleGoals.every(v => v === true)) {
                 job.perkPoints++;
-                job.battleGoals = [false, false, false]; // 초기화
-                
-                // [수정] 브라우저 alert 대신 통일된 디자인 모달 사용
+                job.battleGoals = [false, false, false]; 
                 openModal('modal-perk-success');
             }
             
-            saveData();
-            openPerkPopup(); // 화면 갱신
+            // [변경] saveData() 대신 통합 저장 함수 호출
+            if (typeof saveAllData === 'function') saveAllData();
+            openPerkPopup(); 
         };
         container.appendChild(box);
     });
@@ -2225,7 +2223,6 @@ function togglePerk(pIdx, i) {
     const isChecked = job.checkedPerks[key];
 
     if (!isChecked) {
-        // 새로 체크할 때 포인트 확인
         if (job.perkPoints <= 0) {
             showAlert("사용 가능한 특혜 포인트가 없습니다.", "포인트 부족");
             return;
@@ -2233,14 +2230,15 @@ function togglePerk(pIdx, i) {
         job.checkedPerks[key] = true;
         job.perkPoints--;
     } else {
-        // 이미 체크된 것을 해제할 때
         delete job.checkedPerks[key];
         job.perkPoints++;
     }
 
-    saveData();
-    openPerkPopup(); // 화면 갱신
+    // [변경] 통합 저장 함수 호출
+    if (typeof saveAllData === 'function') saveAllData();
+    openPerkPopup(); 
 }
+
 
 // 5. [신규] 포인트 수동 조절 (상단 +/- 버튼용)
 function changePerkPoint(amt) {
@@ -2250,7 +2248,9 @@ function changePerkPoint(amt) {
         return;
     }
     job.perkPoints += amt;
-    saveData();
+    
+    // [변경] 통합 저장 함수 호출
+    if (typeof saveAllData === 'function') saveAllData();
     openPerkPopup();
 }
 
@@ -3152,20 +3152,22 @@ window.onload = function() {
         if (typeof renderPartyList === 'function') renderPartyList(); 
 
         if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+            // 서버에서 받은 최신 데이터로 로컬 변수 교체
             charData = parties[currentPartyIndex].characters || {};
             scenarios = parties[currentPartyIndex].scenarios || {};
+            // 아이템 해금 목록도 동기화 대상에 포함
+            unlockedItemIds = parties[currentPartyIndex].unlockedItemIds || [];
             
-            // 1. 캐릭터 카드 UI 갱신 (메인 화면)
+            // 1. 메인 화면의 캐릭터 카드 UI 갱신
             Object.keys(charData).forEach(job => {
                 if (typeof syncJobCard === 'function') syncJobCard(job);
             });
 
-            // 2. [추가] 현재 "상세 시트"가 열려있다면, 입력창 값들도 실시간 갱신
-            // 폰에서 보고 있을 때 컴퓨터에서 골드를 바꾸면 폰 화면의 숫자가 실시간으로 바뀝니다.
+            // 2. 현재 "상세 시트" 혹은 "팝업"이 열려있다면 실시간 갱신
             if (typeof currentJob !== 'undefined' && currentJob && charData[currentJob]) {
                 const c = charData[currentJob];
                 
-                // 골드, 경험치 입력창 찾기
+                // 골드, 경험치, 특혜 포인트 텍스트 갱신
                 const gIn = document.getElementById('gold-input') || document.getElementById('input-gold');
                 const eIn = document.getElementById('exp-input') || document.getElementById('input-exp');
                 const pDisp = document.getElementById('perk-count') || document.getElementById('display-perk-points');
@@ -3174,10 +3176,19 @@ window.onload = function() {
                 if (eIn && document.activeElement !== eIn) eIn.value = c.exp || 0;
                 if (pDisp) pDisp.innerText = c.perkPoints || 0;
 
-                // 관련 UI(골드바, 경험치바 등) 업데이트 함수 호출
+                // [추가] 특혜(Perk) 팝업이 활성화되어 있다면 내부 리스트 다시 그리기
+                const perkModal = document.getElementById('popup-perks');
+                if (perkModal && perkModal.classList.contains('active')) {
+                    if (typeof renderPerkList === 'function') renderPerkList();
+                    if (typeof renderBattleGoals === 'function') renderBattleGoals();
+                }
+
+                // 관련 UI(골드바, 경험치바, 가방 등) 업데이트
                 if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
                 if (typeof updateExpBar === 'function') updateExpBar();
                 if (typeof renderBagItems === 'function') renderBagItems('전체');
+                // 상점이 열려있을 경우를 대비
+                if (typeof renderShop === 'function') renderShop();
             }
 
             if (typeof renderScenarios === 'function') renderScenarios();
