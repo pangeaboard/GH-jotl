@@ -1875,6 +1875,33 @@ function renderShopItems(filterType = '전체') {
     });
 }
 
+function getItemOwnershipInfo(itemId) {
+    let count = 0;
+    let tagsHTML = '';
+    const idNum = Number(itemId);
+
+    // 1. 현재 charData(서버 동기화된 최신본)의 모든 직업을 순회
+    Object.keys(charData).forEach(job => {
+        const char = charData[job];
+        // 플레이어 이름이 있고, 인벤토리에 해당 아이템이 있는지 확인
+        if (char.playerName && char.inventory) {
+            // inventory와 items 배열 모두 체크 (변수명 혼용 방지)
+            const hasItem = (char.inventory && char.inventory.includes(idNum)) || 
+                          (char.items && char.items.includes(idNum));
+
+            if (hasItem) {
+                count++;
+                // 소유자 태그 생성 (직업명 표시)
+                tagsHTML += `<span class="owner-badge">${job}</span>`;
+            }
+        }
+    });
+
+    return {
+        count: count,
+        tagsHTML: tagsHTML
+    };
+}
 
 function unlockItem() {
     const input = document.querySelector('#popup-shop footer input');
@@ -3222,7 +3249,8 @@ window.onload = function() {
             charData = parties[currentPartyIndex].characters || {};
             scenarios = parties[currentPartyIndex].scenarios || {};
             unlockedItemIds = parties[currentPartyIndex].unlockedItemIds || [];
-            
+          
+       
             // 1. 메인 화면 카드 갱신
             Object.keys(charData).forEach(job => {
                 if (typeof syncJobCard === 'function') syncJobCard(job);
