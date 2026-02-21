@@ -2360,22 +2360,27 @@ function renderScenarios() {
     }
     container.innerHTML = '';
 
+    // scenarios 데이터가 없으면 실행 중단
+    if (!scenarios) return;
+
     Object.keys(scenarios).forEach(id => {
         const s = scenarios[id];
-	if (!s || typeof s !== 'object' || !s.state) {
-            console.warn(`시나리오 #${id}의 데이터가 없거나 형식이 잘못되었습니다.`);
+        
+        // 데이터 방어 로직
+        if (!s || typeof s !== 'object' || !s.state) {
             return; 
         }
+
         const card = document.createElement('div');
-        
         const isDone = s.state === 'completed';
         const isLocked = s.state === 'locked';
         
-        const isItemAwarded = isDone && s.reward.includes('#') && s.rewardOwner;
+        const rewardStr = s.reward || "";
+        const isItemAwarded = isDone && rewardStr.includes('#') && s.rewardOwner;
         
         card.className = `scenario-card ${s.state}`;
         
-        const rewardText = isDone ? s.reward : "<span style='color:#555;'>클리어 시 공개</span>";
+        const rewardText = isDone ? rewardStr : "<span style='color:#555;'>클리어 시 공개</span>";
         const rewardOwnerClass = isItemAwarded ? `tag-${s.rewardOwner.substring(0, 2)}` : '';
 
         card.innerHTML = `
@@ -2444,8 +2449,11 @@ function renderScenarios() {
             </div>
         `;
         container.appendChild(card);
-    });
-}
+    }); // <--- forEach 닫기
+} // <--- function 닫기
+
+
+
 /**
  * [추가 기능] 잠긴 시나리오를 수동으로 해금하는 함수
  */
