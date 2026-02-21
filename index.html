@@ -3056,26 +3056,37 @@ function openCityEventMode() {
 }
 
 window.onload = function() {
-    // .on('value', (snapshot) => { ... }) 형태로 작성해야 합니다.
     database.ref('parties/').on('value', function(snapshot) {
         const data = snapshot.val();
         if (data) {
             parties = data;
             console.log("서버와 실시간 동기화 중...");
+            
+            // 1. 파티 목록 화면 갱신
             renderPartyList(); 
             
-            // 현재 파티를 플레이 중이라면 화면의 데이터도 실시간 업데이트
+            // 2. 현재 파티를 플레이 중이라면 내부 데이터와 UI 업데이트
             if (currentPartyIndex !== null && parties[currentPartyIndex]) {
                 charData = parties[currentPartyIndex].characters;
                 scenarios = parties[currentPartyIndex].scenarios;
                 
-                // 시나리오 목록이나 캐릭터 시트가 열려있다면 UI 갱신
+                // ★ 핵심: UI 갱신 코드 추가 (직업 카드들의 이름을 다시 그립니다)
+                Object.keys(charData).forEach(job => {
+                    if (typeof syncJobCard === 'function') {
+                        syncJobCard(job);
+                    }
+                });
+
+                // 시나리오 목록 갱신
                 if (typeof renderScenarios === 'function') renderScenarios();
-                // 필요한 경우 현재 선택된 캐릭터 시트 UI 갱신 함수 호출
+                
+                // 만약 현재 특혜(Perk) 팝업이나 상세 시트가 열려있다면 그것도 갱신
+                if (typeof renderPerkList === 'function' && currentJob) {
+                     renderPerkList(); 
+                }
             }
         } else {
             console.log("서버에 데이터가 없습니다.");
-            // 서버에 데이터가 아예 없을 때만 로컬스토리지 확인
             if (parties.length === 0) {
                 parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
                 renderPartyList();
