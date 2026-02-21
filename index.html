@@ -1780,7 +1780,9 @@ function executeTrade(targetJob) {
     // 4. 변경사항 저장 (이게 없으면 새로고침 시 아이템이 돌아옵니다)
     saveAllData();
 
-    alert(`${targetJob}에게 [#${itemId}] 아이템을 전달했습니다!`);
+    if (typeof showAlert === 'function') {
+        showAlert(`${targetJob} (${charData[targetJob].playerName})에게 [#${itemId}] 아이템을 전달했습니다!`, "거래 완료");
+    }
     
     // 5. UI 새로고침 및 모달 닫기
     closeModal('modal-trade-select');
@@ -1855,6 +1857,12 @@ function unlockItem() {
     const val = input.value.trim();
     if (!val) return;
 
+    // 데이터 동기화를 위한 사전 준비
+    if (currentPartyIndex === null || !parties[currentPartyIndex]) {
+        showAlert("오류", "선택된 파티가 없습니다.");
+        return;
+    }
+
     // 1. 범위 해금 처리 (예: 1-13, 1~13)
     const rangeMatch = val.match(/^(\d+)[-~](\d+)$/);
     if (rangeMatch) {
@@ -1863,7 +1871,6 @@ function unlockItem() {
         let addedCount = 0;
 
         for (let i = start; i <= end; i++) {
-            // 아이템이 존재하고 아직 해금되지 않은 경우만 추가
             if (itemData.some(item => item.id === i) && !unlockedItemIds.includes(i)) {
                 unlockedItemIds.push(i);
                 addedCount++;
@@ -1871,6 +1878,10 @@ function unlockItem() {
         }
         
         if (addedCount > 0) {
+            // [핵심] 저장 전 파티 원본 데이터 업데이트
+            parties[currentPartyIndex].unlockedItemIds = unlockedItemIds;
+            saveAllData(); 
+            renderShopItems('전체');
             showAlert("상점 물품 입고", `<span class="highlight-reward">${start}번~${end}번</span> 아이템 중<br>${addedCount}개의 품목이 해금되었습니다.`);
         } else {
             showAlert("안내", "입력한 범위 내에 새로 해금할 아이템이 없습니다.");
@@ -1888,27 +1899,34 @@ function unlockItem() {
 
         const index = unlockedItemIds.indexOf(itemNo);
         if (index > -1) {
-            // 이미 해금된 상태 -> 커스텀 디자인 컨펌창으로 잠금 확인
+            // 이미 해금된 상태 -> 잠금 확인
             showAlert(
                 "아이템 재잠금", 
                 `#${String(itemNo).padStart(2, '0')} <span style="color:var(--accent)">${item.name}</span>을(를)<br>다시 잠그시겠습니까?`, 
                 () => {
                     unlockedItemIds.splice(index, 1);
+                    // [핵심] 동기화 업데이트
+                    parties[currentPartyIndex].unlockedItemIds = unlockedItemIds;
                     saveAllData();
                     renderShopItems('전체');
                 }
             );
         } else {
-            // 잠긴 상태 -> 해금 실행 및 화려한 전용 모달 출력
+            // 잠긴 상태 -> 해금 실행
             unlockedItemIds.push(itemNo);
+            
+            // [핵심] 동기화 업데이트
+            parties[currentPartyIndex].unlockedItemIds = unlockedItemIds;
+            saveAllData();
+            renderShopItems('전체');
+
+            // 전용 모달 출력
             document.getElementById('unlock-item-title').innerText = `#${String(item.id).padStart(2, '0')} 아이템 해금!`;
             document.getElementById('unlock-item-desc').innerText = item.name;
             openModal('modal-unlock-success');
         }
     }
 
-    saveAllData();
-    renderShopItems('전체');
     input.value = '';
 }
 
@@ -2098,7 +2116,7 @@ function openTradeModal(itemId) {
             btn.className = 'btn-confirm';
             btn.style.width = '100%';
             btn.style.background = '#333';
-            btn.style.border = '1px solid var(--accent)';
+            btn.style.border = '1px solid var(--accent)';	
             btn.style.color = 'white';
             // 직업명(플레이어명) 형태로 표시
             btn.innerText = `${job} (${charData[job].playerName})`;
