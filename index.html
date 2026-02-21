@@ -1594,10 +1594,10 @@ currentJob = job;
 
         function saveGold(val) { charData[currentJob].gold = val; }
 
-      function executeReset() {
+     function executeReset() {
     if (!currentJob || !charData[currentJob]) return;
 
-    // 데이터 초기화 (기존 perks, battleGoals 등도 함께 초기화해야 함)
+    // 1. 메모리 상의 캐릭터 데이터를 '완전 초기 상태'로 초기화
     charData[currentJob] = { 
         playerName: '', 
         exp: 0, 
@@ -1606,20 +1606,29 @@ currentJob = job;
         battleGoals: [false, false, false],
         checkedPerks: {},
         perkPoints: 0,
-        items: [] // 아이템도 비워줌
+        items: [] 
     };
 
-    // UI 동기화
-    syncJobCard(currentJob);
-    updateDifficultyBar(); // 난이도 계산기도 최신화
-
-    // [핵심] 서버에 즉시 전송
-    if (typeof saveAllData === 'function') {
-        saveAllData(); 
-        console.log(`${currentJob} 데이터 삭제 및 서버 동기화 완료`);
+    // 2. [가장 중요] 변경된 데이터를 전체 파티 배열(parties)에 즉시 반영
+    // 이 작업이 없으면 saveAllData를 불러도 옛날 파티 데이터가 저장됩니다.
+    if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+        parties[currentPartyIndex].characters = charData;
     }
 
-    // 모달 닫기
+    // 3. UI 즉시 갱신
+    syncJobCard(currentJob);
+    if (typeof updateDifficultyBar === 'function') updateDifficultyBar();
+
+    // 4. 서버로 '파티 배열 전체'를 전송 (덮어쓰기)
+    // 함수 이름이 saveAllData인지 saveAllParties인지 확인 후 호출하세요!
+    if (typeof saveAllData === 'function') {
+        saveAllData(); 
+        console.log("🔥 서버 데이터 완전 초기화 및 동기화 완료");
+    } else if (typeof saveAllParties === 'function') {
+        saveAllParties();
+    }
+
+    // 5. 모달 및 상세 시트 닫기
     closeModal('modal-reset-confirm');
     closeModal('modal-char-sheet');
 }
