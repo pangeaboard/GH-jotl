@@ -1201,24 +1201,31 @@ function confirmPartyName() {
         return;
     }
 
-    // 1. 새 파티 데이터 객체 생성 (기존 charData, scenarios 참조)
-    // 주의: 전역에 charData와 scenarios 기본값이 반드시 있어야 합니다.
+    // [핵심 수정] 기존 charData를 복사하지 않고, 모든 직업을 초기 상태로 정의합니다.
+    const initialCharacters = {
+        "적위병": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
+        "공허수호자": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
+        "파괴전사": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
+        "도끼투척수": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} }
+    };
+
+    // 1. 새 파티 데이터 객체 생성
     const newParty = {
         partyName: name,
-        characters: JSON.parse(JSON.stringify(charData)), 
-        scenarios: JSON.parse(JSON.stringify(scenarios)),
-        unlockedItems: [] // 아이템 해금 정보도 파티별로 관리하려면 추가
+        characters: initialCharacters, 
+        scenarios: {}, 
+        unlockedItemIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] // 기본 아이템 해금
     };
-Object.keys(newParty.characters).forEach(job => {
-        if (!newParty.characters[job].perks) {
-            newParty.characters[job].perks = {}; 
-        }
-    });
 
     // 2. 배열에 추가 및 인덱스 설정
-    if (!Array.isArray(parties)) parties = []; // 방어 코드
+    if (!Array.isArray(parties)) parties = []; 
     parties.push(newParty);
     currentPartyIndex = parties.length - 1;
+
+    // [추가] 현재 메모리 변수들도 새 파티 데이터로 즉시 교체 (중요)
+    charData = initialCharacters;
+    scenarios = {};
+    if (typeof unlockedItemIds !== 'undefined') unlockedItemIds = newParty.unlockedItemIds;
 
     // 3. UI 업데이트
     document.getElementById('display-party-name').innerText = name;
@@ -1229,15 +1236,13 @@ Object.keys(newParty.characters).forEach(job => {
     // 5. 정리 및 화면 이동
     input.value = '';
     closeModal('modal-party-name');
-    renderPartyList(); // 목록 갱신
+    renderPartyList(); 
     
     // 6. 바로 해당 파티의 직업 선택 화면으로 진입
     selectParty(currentPartyIndex);
     
     console.log("파티 생성 및 서버 전송 시도 완료");
 }
-
-
 function renderPartyList() {
     const listContainer = document.getElementById('party-list');
     if (!listContainer) return;
@@ -1314,16 +1319,23 @@ function deleteParty(index) {
 // 2. 실제로 삭제를 실행하는 함수
 function executePartyDelete() {
     if (partyIndexToDelete !== null) {
-        // 만약 삭제하려는 파티가 현재 내가 보고 있는 파티라면 인덱스 초기화
+        // [수정] 삭제하려는 파티가 현재 내가 보고 있는 파티일 경우
         if (currentPartyIndex === partyIndexToDelete) {
             currentPartyIndex = null;
+            // 폰 메모리에 남은 유령 데이터들을 삭제하여 좀비 부활 방지
+            charData = {};
+            scenarios = {};
+            if (typeof unlockedItemIds !== 'undefined') unlockedItemIds = [];
+            
+            // 파티가 사라졌으니 메인 화면(파티 선택)으로 이동
+            if (typeof showScreen === 'function') showScreen('screen-party-select');
         } else if (currentPartyIndex > partyIndexToDelete) {
             // 삭제된 항목보다 뒤에 있는 파티를 보고 있었다면 인덱스 하나 당김
             currentPartyIndex--;
         }
 
         parties.splice(partyIndexToDelete, 1); // 배열에서 삭제
-        saveAllParties();     // 서버/로컬 저장
+        saveAllParties();     // 서버/로컬 저장 (여기서 삭제된 상태가 서버로 전송됨)
         renderPartyList();    // 목록 갱신
         
         closeModal('modal-delete-party-confirm');
@@ -1334,7 +1346,6 @@ function executePartyDelete() {
         }
     }
 }
-
 function saveAllParties() {
     // [추가] 현재 선택된 파티가 있다면, 메모리상의 최신 데이터(charData, scenarios)를 배열에 업데이트
     if (currentPartyIndex !== null && parties[currentPartyIndex]) {
@@ -1356,6 +1367,8 @@ function saveAllParties() {
         });
     }
 }
+
+
 function showScreen(id) {
     // 1. 'screen' 혹은 'section' 태그를 가진 모든 요소를 찾아서 숨김
     const allScreens = document.querySelectorAll('.screen, section');
