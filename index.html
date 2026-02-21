@@ -1513,21 +1513,27 @@ function calcDifficulty(diff, btn) {
         }
 
      function confirmPlayerName(job) {
-    const name = document.getElementById('input-' + job).value.trim();
+    const inputEl = document.getElementById('input-' + job);
+    if (!inputEl) return;
+    
+    const name = inputEl.value.trim();
     if (!name) return;
 
-    // 1. 데이터 변경
+    // 데이터 저장
     charData[job].playerName = name;
     currentJob = job;
     
-    // 2. UI 반영
+    // UI 반영
     syncJobCard(job);
-    document.getElementById('card-' + job).classList.remove('expanded');
+    const card = document.getElementById('card-' + job);
+    if (card) card.classList.remove('expanded');
     
-    // 3. 서버 및 로컬 저장소 동기화 (이게 핵심!)
-    saveAllParties(); 
+    // [핵심] 저장 함수명을 saveAllData로 통일
+    if (typeof saveAllData === 'function') {
+        saveAllData();
+    }
 
-    // 4. 상세 시트 열기
+    // 상세 시트 열기
     openDetailSheet(job);
 }
 
@@ -1588,12 +1594,35 @@ currentJob = job;
 
         function saveGold(val) { charData[currentJob].gold = val; }
 
-        function executeReset() {
-            charData[currentJob] = { playerName: '', exp: 0, gold: 0, lv: 1 };
-            syncJobCard(currentJob);
-            closeModal('modal-reset-confirm');
-            closeModal('modal-char-sheet');
-        }
+      function executeReset() {
+    if (!currentJob || !charData[currentJob]) return;
+
+    // 데이터 초기화 (기존 perks, battleGoals 등도 함께 초기화해야 함)
+    charData[currentJob] = { 
+        playerName: '', 
+        exp: 0, 
+        gold: 0, 
+        lv: 1,
+        battleGoals: [false, false, false],
+        checkedPerks: {},
+        perkPoints: 0,
+        items: [] // 아이템도 비워줌
+    };
+
+    // UI 동기화
+    syncJobCard(currentJob);
+    updateDifficultyBar(); // 난이도 계산기도 최신화
+
+    // [핵심] 서버에 즉시 전송
+    if (typeof saveAllData === 'function') {
+        saveAllData(); 
+        console.log(`${currentJob} 데이터 삭제 및 서버 동기화 완료`);
+    }
+
+    // 모달 닫기
+    closeModal('modal-reset-confirm');
+    closeModal('modal-char-sheet');
+}
 
 // [수정] 함수 선언부와 시작 중괄호({)를 명확히 추가했습니다.
 function addStatOnBlur(type) {
