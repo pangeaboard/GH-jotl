@@ -361,7 +361,7 @@
 .icon { display: inline-block; width: 14px; vertical-align: middle; margin: 0 2px; }
 
 /* 특혜 설명 내의 텍스트형 아이콘 전용 */
-.icon-text {
+.icon {
     display: inline-block;
     width: auto;             /* 가로 제한 해제 */
     min-width: 14px;
@@ -423,19 +423,19 @@
 }
 
 /* 색상은 클래스별로 동일하게 적용 */
-.icon-text.status { background-color: #A29BFE; }
-.icon-text.poison { background-color: #819e7a; }
-.icon-text.wound  { background-color: #e67e22; }
-.icon-text.fire   { background-color: #E74C3C; }
-.icon-text.ice    { background-color: #3498db; }
-.icon-text.air    { background-color: #74b9ff; }
-.icon-text.earth  { background-color: #795548; }
-.icon-text.light  { background-color: #f1c40f; color: black; } /* 빛만 검은글씨 */
-.icon-text.dark   { background-color: #2c3e50; }
-.icon-text.curse  { background-color: #4b4b4b; color: #a29bfe; }
-.icon-text.immob  { background-color: #4b4b4b; color: #e74c3c; }
-.icon-text.heal { background-color: #27ae60; }
-.icon-text.stun { background-color: #FFFAFA; color: blue; }
+.icon.status { background-color: #A29BFE; }
+.icon.poison { background-color: #819e7a; }
+.icon.wound  { background-color: #e67e22; }
+.icon.fire   { background-color: #E74C3C; }
+.icon.ice    { background-color: #3498db; }
+.icon.air    { background-color: #74b9ff; }
+.icon.earth  { background-color: #795548; }
+.icon.light  { background-color: #f1c40f; color: black; } /* 빛만 검은글씨 */
+.icon.dark   { background-color: #2c3e50; }
+.icon.curse  { background-color: #4b4b4b; color: #a29bfe; }
+.icon.immob  { background-color: #4b4b4b; color: #e74c3c; }
+.icon.heal { background-color: #27ae60; }
+.icon.stun { background-color: #FFFAFA; color: blue; }
 
 body, .screen {
     background-color: #1a1a1a; /* 시트와 동일한 어두운 배경 */
@@ -1207,6 +1207,11 @@ function confirmPartyName() {
         scenarios: JSON.parse(JSON.stringify(scenarios)),
         unlockedItems: [] // 아이템 해금 정보도 파티별로 관리하려면 추가
     };
+Object.keys(newParty.characters).forEach(job => {
+        if (!newParty.characters[job].perks) {
+            newParty.characters[job].perks = {}; 
+        }
+    });
 
     // 2. 배열에 추가 및 인덱스 설정
     if (!Array.isArray(parties)) parties = []; // 방어 코드
@@ -1300,16 +1305,26 @@ function executePartyDelete() {
     }
 }
 function saveAllParties() {
+    // [추가] 현재 선택된 파티가 있다면, 메모리상의 최신 데이터(charData, scenarios)를 배열에 업데이트
+    if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+        parties[currentPartyIndex].characters = charData;
+        parties[currentPartyIndex].scenarios = scenarios;
+    }
+
     // 1. 기존처럼 로컬스토리지에도 저장 (백업용)
     localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
 
     // 2. 파이어베이스 서버에 저장 (실시간 동기화)
-    // 'my_party_data'라는 이름의 경로에 parties 배열 전체를 올립니다.
-    database.ref('parties/').set(parties)
-    .then(() => console.log("서버 저장 완료!"))
-    .catch((error) => console.error("서버 저장 실패:", error));
+    if (typeof database !== 'undefined') {
+        database.ref('parties/').set(parties)
+        .then(() => {
+            console.log("서버 저장 완료!");
+        })
+        .catch((error) => {
+            console.error("서버 저장 실패:", error);
+        });
+    }
 }
-
 function showScreen(id) {
     // 1. 'screen' 혹은 'section' 태그를 가진 모든 요소를 찾아서 숨김
     const allScreens = document.querySelectorAll('.screen, section');
@@ -1466,15 +1481,24 @@ function calcDifficulty(diff, btn) {
             }
         }
 
-        function confirmPlayerName(job) {
-            const name = document.getElementById('input-' + job).value.trim();
-            if (!name) return;
-            charData[job].playerName = name;
-            currentJob = job;
-            syncJobCard(job);
-            document.getElementById('card-' + job).classList.remove('expanded');
-            openDetailSheet(job);
-        }
+     function confirmPlayerName(job) {
+    const name = document.getElementById('input-' + job).value.trim();
+    if (!name) return;
+
+    // 1. 데이터 변경
+    charData[job].playerName = name;
+    currentJob = job;
+    
+    // 2. UI 반영
+    syncJobCard(job);
+    document.getElementById('card-' + job).classList.remove('expanded');
+    
+    // 3. 서버 및 로컬 저장소 동기화 (이게 핵심!)
+    saveAllParties(); 
+
+    // 4. 상세 시트 열기
+    openDetailSheet(job);
+}
 
 function openDetailSheet(job) {
     const data = charData[job];
@@ -2088,6 +2112,11 @@ function renderPerkList() {
     container.innerHTML = '';
     const job = charData[currentJob];
     const perks = perkData[currentJob] || [];
+
+    // [중요] 만약 checkedPerks 데이터가 아예 없다면 빈 객체{}로 초기화해서 에러 방지
+    if (!job.checkedPerks) {
+        job.checkedPerks = {};
+    }
     
     perks.forEach((perk, pIdx) => {
         const row = document.createElement('div');
@@ -2099,23 +2128,23 @@ function renderPerkList() {
         
         for(let i = 0; i < perk.n; i++) {
             const dot = document.createElement('div');
-            // 저장된 체크 상태 확인 (pIdx-i 방식)
-            const isChecked = job.checkedPerks[pIdx + '-' + i];
+            
+            // 저장된 체크 상태 확인 (데이터가 없으면 false로 처리)
+            const isChecked = job.checkedPerks[pIdx + '-' + i] || false;
             dot.className = `perk-check ${isChecked ? 'checked' : ''}`;
             
             // 클릭 시 togglePerk 함수 실행
             dot.onclick = () => togglePerk(pIdx, i);
             checkGroup.appendChild(dot);
         }
-        
-      // 특혜 설명 텍스트 (아이콘 포함)
-        const txt = document.createElement('div');
-        txt.className = 'perk-txt';
-      
-        txt.innerHTML = perk.t.replace(/class=['"]icon /g, "class='icon-text "); 
+
+        // 설명 텍스트 추가
+        const label = document.createElement('div');
+        label.className = 'perk-text';
+        label.innerHTML = perk.t;
 
         row.appendChild(checkGroup);
-        row.appendChild(txt);
+        row.appendChild(label);
         container.appendChild(row);
     });
 }
