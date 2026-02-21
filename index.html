@@ -1264,12 +1264,33 @@ function renderPartyList() {
 }
 
 function selectParty(index) {
+    // 1. 현재 선택된 파티 인덱스를 전역 변수에 저장 (가장 중요)
+    currentPartyIndex = index;
+    
     const selected = parties[index];
-    charData = selected.characters;
-    scenarios = selected.scenarios;
+    
+    // 2. 전역 데이터 변수를 선택된 파티의 데이터로 완전 교체
+    // (데이터가 없을 경우를 대비해 기본값 {}를 설정합니다)
+    charData = selected.characters || {};
+    scenarios = selected.scenarios || {};
+    unlockedItemIds = selected.unlockedItemIds || [];
+
+    // 3. UI 갱신
     document.getElementById('display-party-name').innerText = selected.partyName;
+    
+    // 4. 화면 전환
     showScreen('screen-job-select');
+
+    // 5. [추가] 진입 시점에 캐릭터 카드 UI 강제 동기화
+    // 이 코드가 있어야 폰에서도 이름이 즉시 보입니다.
+    Object.keys(charData).forEach(job => {
+        if (typeof syncJobCard === 'function') {
+            syncJobCard(job);
+        }
+    });
+
     renderScenarios();
+    console.log(`[${selected.partyName}] 파티 진입 완료 (Index: ${index})`);
 }
 
 let partyIndexToDelete = null; // 삭제 대상을 잠시 저장할 변수
@@ -1293,6 +1314,14 @@ function deleteParty(index) {
 // 2. 실제로 삭제를 실행하는 함수
 function executePartyDelete() {
     if (partyIndexToDelete !== null) {
+        // 만약 삭제하려는 파티가 현재 내가 보고 있는 파티라면 인덱스 초기화
+        if (currentPartyIndex === partyIndexToDelete) {
+            currentPartyIndex = null;
+        } else if (currentPartyIndex > partyIndexToDelete) {
+            // 삭제된 항목보다 뒤에 있는 파티를 보고 있었다면 인덱스 하나 당김
+            currentPartyIndex--;
+        }
+
         parties.splice(partyIndexToDelete, 1); // 배열에서 삭제
         saveAllParties();     // 서버/로컬 저장
         renderPartyList();    // 목록 갱신
@@ -1300,12 +1329,12 @@ function executePartyDelete() {
         closeModal('modal-delete-party-confirm');
         partyIndexToDelete = null; // 변수 초기화
         
-        // 피드백 알림 (선택 사항 - 기존 showAlert 함수가 있다면 사용)
         if (typeof showAlert === 'function') {
             showAlert("삭제 완료", "파티가 안전하게 삭제되었습니다.");
         }
     }
 }
+
 function saveAllParties() {
     // [추가] 현재 선택된 파티가 있다면, 메모리상의 최신 데이터(charData, scenarios)를 배열에 업데이트
     if (currentPartyIndex !== null && parties[currentPartyIndex]) {
