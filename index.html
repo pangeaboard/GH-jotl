@@ -1833,21 +1833,26 @@ function executeDelete() {
 function renderShopItems(filterType = '전체') {
     const listContainer = document.getElementById('shop-item-list');
     if (!listContainer) return;
-    listContainer.innerHTML = '';
 
+    // [추가] 리스트를 비우기 전 현재 스크롤 위치 기억
+    const savedScrollTop = listContainer.scrollTop;
+
+    // 1. 카테고리 버튼 상태 업데이트
     const buttons = document.querySelectorAll('#popup-shop .js-category-bar button');
     buttons.forEach(btn => {
         if (btn.innerText === filterType) btn.classList.add('active');
         else btn.classList.remove('active');
     });
 
+    // 2. 아이템 정렬 및 초기화
     itemData.sort((a, b) => a.id - b.id); 
+    listContainer.innerHTML = '';
 
+    // 3. 아이템 카드 생성 루프
     itemData.forEach(item => {
         if (!unlockedItemIds.includes(item.id)) return;
         if (filterType !== '전체' && item.type !== filterType) return;
 
-        // [수정] 실시간 데이터 참조
         const ownership = getItemOwnershipInfo(item.id);
         const isSoldOut = ownership.count >= item.stock;
         const remainingStock = item.stock - ownership.count;
@@ -1873,34 +1878,12 @@ function renderShopItems(filterType = '전체') {
         }
         listContainer.appendChild(card);
     });
-}
 
-function getItemOwnershipInfo(itemId) {
-    let count = 0;
-    let tagsHTML = '';
-    const idNum = Number(itemId);
-
-    // 1. 현재 charData(서버 동기화된 최신본)의 모든 직업을 순회
-    Object.keys(charData).forEach(job => {
-        const char = charData[job];
-        // 플레이어 이름이 있고, 인벤토리에 해당 아이템이 있는지 확인
-        if (char.playerName && char.inventory) {
-            // inventory와 items 배열 모두 체크 (변수명 혼용 방지)
-            const hasItem = (char.inventory && char.inventory.includes(idNum)) || 
-                          (char.items && char.items.includes(idNum));
-
-            if (hasItem) {
-                count++;
-                // 소유자 태그 생성 (직업명 표시)
-                tagsHTML += `<span class="owner-badge">${job}</span>`;
-            }
-        }
+    // [핵심] 리스트가 다시 그려진 후 스크롤 위치를 즉시 복구
+    // 브라우저 렌더링 타이밍을 맞추기 위해 requestAnimationFrame을 사용합니다.
+    requestAnimationFrame(() => {
+        listContainer.scrollTop = savedScrollTop;
     });
-
-    return {
-        count: count,
-        tagsHTML: tagsHTML
-    };
 }
 
 function unlockItem() {
@@ -3229,10 +3212,8 @@ function openCityEventMode() {
 
 window.onload = function() {
     database.ref('parties/').on('value', function(snapshot) {
-        // [수정] isLocalUpdate가 켜져 있어도 폰(다른 기기)에서는 무조건 돌아가야 합니다.
-        // 만약 이 로직 때문에 무한 루프가 생긴다면 이 줄을 더 정교하게 다듬어야 합니다.
         if (typeof isLocalUpdate !== 'undefined' && isLocalUpdate) {
-            isLocalUpdate = false; // 실행 후 바로 꺼줌
+            isLocalUpdate = false; 
             return;
         }
 
@@ -3249,17 +3230,21 @@ window.onload = function() {
             charData = parties[currentPartyIndex].characters || {};
             scenarios = parties[currentPartyIndex].scenarios || {};
             unlockedItemIds = parties[currentPartyIndex].unlockedItemIds || [];
-          
-       
+            
             // 1. 메인 화면 카드 갱신
             Object.keys(charData).forEach(job => {
                 if (typeof syncJobCard === 'function') syncJobCard(job);
             });
 
-            // 2. [추가] 상점 해금 및 소유주 실시간 동기화 (가장 중요)
-            // 상점 팝업이 열려 있든 아니든, 서버 데이터를 받으면 상점 목록을 미리 업데이트해둡니다.
-            if (typeof renderShopItems === 'function') {
-                renderShopItems('전체'); 
+            // 2. [수정] 상점이 열려있을 때만, 기존 필터를 유지하며 실시간 갱신
+            const shopPopup = document.getElementById('popup-shop');
+            if (shopPopup && shopPopup.classList.contains('active')) {
+                if (typeof renderShopItems === 'function') {
+                    // 현재 활성화된 카테고리 버튼의 텍스트를 찾아 필터로 전달
+                    const activeBtn = document.querySelector('#popup-shop .js-category-bar button.active');
+                    const currentFilter = activeBtn ? activeBtn.innerText : '전체';
+                    renderShopItems(currentFilter); 
+                }
             }
 
             // 3. 현재 "상세 시트" 관련 실시간 갱신
@@ -3274,7 +3259,6 @@ window.onload = function() {
                 if (eIn && document.activeElement !== eIn) eIn.value = c.exp || 0;
                 if (pDisp) pDisp.innerText = c.perkPoints || 0;
 
-                // 관련 UI 실시간 갱신 명령들
                 if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
                 if (typeof updateExpBar === 'function') updateExpBar();
                 if (typeof renderBagItems === 'function') renderBagItems('전체');
