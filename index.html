@@ -3231,6 +3231,32 @@ window.onload = function() {
         }
 
         const data = snapshot.val();
+        
+        // 1. [방어 코드] 데이터가 아예 없거나 삭제된 경우 처리
+        if (currentPartyIndex !== null) {
+            // data가 null이거나, 내가 보던 인덱스가 없으면 '강제 퇴장'
+            if (!data || !data[currentPartyIndex]) {
+                console.warn("⚠️ 참여 중인 파티가 삭제됨을 감지했습니다.");
+                
+                currentPartyIndex = null;
+                charData = {};
+                scenarios = {};
+                unlockedItemIds = [];
+                
+                // 에러 방지를 위해 parties 변수도 동기화
+                parties = data ? (Array.isArray(data) ? data : Object.values(data)) : [];
+                
+                if (typeof showScreen === 'function') {
+                    showScreen('screen-party-select');
+                }
+                if (typeof renderPartyList === 'function') renderPartyList();
+                
+                localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
+                return; // ⛔ 중요: 에러 방지를 위해 여기서 실행 중단!
+            }
+        }
+
+        // 2. 정상적인 데이터 업데이트
         if (!data) {
             parties = []; 
         } else {
@@ -3239,31 +3265,32 @@ window.onload = function() {
 
         if (typeof renderPartyList === 'function') renderPartyList(); 
 
+        // 3. [에러 방지] parties[currentPartyIndex]가 실존하는지 한 번 더 확인
         if (currentPartyIndex !== null && parties[currentPartyIndex]) {
-            charData = parties[currentPartyIndex].characters || {};
-            scenarios = parties[currentPartyIndex].scenarios || {};
-            unlockedItemIds = parties[currentPartyIndex].unlockedItemIds || [];
+            const currentParty = parties[currentPartyIndex];
             
-            // 1. 메인 화면 카드 갱신
+            charData = currentParty.characters || {};
+            scenarios = currentParty.scenarios || {};
+            unlockedItemIds = currentParty.unlockedItemIds || [];
+            
+            // UI 갱신 (에러 방지를 위해 안전하게 호출)
             Object.keys(charData).forEach(job => {
                 if (typeof syncJobCard === 'function') syncJobCard(job);
             });
 
-            // 2. [수정] 상점이 열려있을 때만, 기존 필터를 유지하며 실시간 갱신
+            // 상점 갱신 (안전 장치 추가)
             const shopPopup = document.getElementById('popup-shop');
             if (shopPopup && shopPopup.classList.contains('active')) {
                 if (typeof renderShopItems === 'function') {
-                    // 현재 활성화된 카테고리 버튼의 텍스트를 찾아 필터로 전달
                     const activeBtn = document.querySelector('#popup-shop .js-category-bar button.active');
                     const currentFilter = activeBtn ? activeBtn.innerText : '전체';
                     renderShopItems(currentFilter); 
                 }
             }
 
-            // 3. 현재 "상세 시트" 관련 실시간 갱신
+            // 시트 데이터 갱신
             if (typeof currentJob !== 'undefined' && currentJob && charData[currentJob]) {
                 const c = charData[currentJob];
-                
                 const gIn = document.getElementById('gold-input') || document.getElementById('input-gold');
                 const eIn = document.getElementById('exp-input') || document.getElementById('input-exp');
                 const pDisp = document.getElementById('perk-count') || document.getElementById('display-perk-points');
