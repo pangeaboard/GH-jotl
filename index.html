@@ -1347,27 +1347,26 @@ function executePartyDelete() {
     }
 }
 function saveAllParties() {
-    // [추가] 현재 선택된 파티가 있다면, 메모리상의 최신 데이터(charData, scenarios)를 배열에 업데이트
-    if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+    // [수정] 현재 선택된 파티가 배열 범위 내에 실제로 존재할 때만 업데이트
+    if (currentPartyIndex !== null && parties && parties[currentPartyIndex]) {
         parties[currentPartyIndex].characters = charData;
         parties[currentPartyIndex].scenarios = scenarios;
+        // 해금 아이템도 파티별 저장에 포함
+        if (typeof unlockedItemIds !== 'undefined') {
+            parties[currentPartyIndex].unlockedItemIds = unlockedItemIds;
+        }
     }
 
-    // 1. 기존처럼 로컬스토리지에도 저장 (백업용)
+    // 로컬스토리지 저장
     localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
 
-    // 2. 파이어베이스 서버에 저장 (실시간 동기화)
+    // 서버 저장
     if (typeof database !== 'undefined') {
         database.ref('parties/').set(parties)
-        .then(() => {
-            console.log("서버 저장 완료!");
-        })
-        .catch((error) => {
-            console.error("서버 저장 실패:", error);
-        });
+        .then(() => { console.log("서버 저장 완료"); })
+        .catch((error) => { console.error("서버 저장 실패:", error); });
     }
 }
-
 
 function showScreen(id) {
     // 1. 'screen' 혹은 'section' 태그를 가진 모든 요소를 찾아서 숨김
@@ -3225,60 +3224,63 @@ function openCityEventMode() {
 
 window.onload = function() {
     database.ref('parties/').on('value', function(snapshot) {
+        // [수정] 내 기기에서 직접 저장한 경우 리스너 무한 루프 방지
         if (typeof isLocalUpdate !== 'undefined' && isLocalUpdate) {
             isLocalUpdate = false; 
             return;
         }
 
         const data = snapshot.val();
+        // 서버 데이터를 배열 형태로 변환 (데이터가 없으면 빈 배열)
+        const remoteParties = data ? (Array.isArray(data) ? data : Object.values(data)) : [];
         
-        // 1. [방어 코드] 데이터가 아예 없거나 삭제된 경우 처리
+        // 1. [강제 퇴장 로직] 파티 삭제 감지
         if (currentPartyIndex !== null) {
-            // data가 null이거나, 내가 보던 인덱스가 없으면 '강제 퇴장'
-            if (!data || !data[currentPartyIndex]) {
-                console.warn("⚠️ 참여 중인 파티가 삭제됨을 감지했습니다.");
+            // 서버에 데이터가 아예 없거나, 내가 보고 있던 인덱스가 사라졌을 때
+            if (!data || !data[currentPartyIndex] || remoteParties.length <= currentPartyIndex) {
+                console.warn("⚠️ 참여 중인 파티가 서버에서 삭제됨을 감지했습니다.");
                 
+                // 전역 변수 초기화 (메모리 세척)
                 currentPartyIndex = null;
                 charData = {};
                 scenarios = {};
                 unlockedItemIds = [];
-                
-                // 에러 방지를 위해 parties 변수도 동기화
-                parties = data ? (Array.isArray(data) ? data : Object.values(data)) : [];
-                
+                parties = remoteParties;
+
+                // 화면 전환 및 목록 갱신
                 if (typeof showScreen === 'function') {
                     showScreen('screen-party-select');
                 }
-                if (typeof renderPartyList === 'function') renderPartyList();
+                if (typeof renderPartyList === 'function') {
+                    renderPartyList();
+                }
                 
+                // 로컬 스토리지 최신화 후 종료 (아래 갱신 로직 실행 안 함)
                 localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
-                return; // ⛔ 중요: 에러 방지를 위해 여기서 실행 중단!
+                alert("참여 중인 파티가 삭제되어 목록으로 이동합니다.");
+                return; 
             }
         }
 
-        // 2. 정상적인 데이터 업데이트
-        if (!data) {
-            parties = []; 
-        } else {
-            parties = Array.isArray(data) ? data : Object.values(data);
-        }
-
+        // 2. 파티 목록 데이터 동기화
+        parties = remoteParties;
         if (typeof renderPartyList === 'function') renderPartyList(); 
 
-        // 3. [에러 방지] parties[currentPartyIndex]가 실존하는지 한 번 더 확인
+        // 3. [상세 데이터 갱신] 현재 파티 안에 있는 경우만 실행
         if (currentPartyIndex !== null && parties[currentPartyIndex]) {
             const currentParty = parties[currentPartyIndex];
             
+            // 파티별 데이터 로드
             charData = currentParty.characters || {};
             scenarios = currentParty.scenarios || {};
             unlockedItemIds = currentParty.unlockedItemIds || [];
             
-            // UI 갱신 (에러 방지를 위해 안전하게 호출)
+            // 메인 화면 직업 카드들 갱신
             Object.keys(charData).forEach(job => {
                 if (typeof syncJobCard === 'function') syncJobCard(job);
             });
 
-            // 상점 갱신 (안전 장치 추가)
+            // 상점 팝업 실시간 갱신 (열려있을 때만)
             const shopPopup = document.getElementById('popup-shop');
             if (shopPopup && shopPopup.classList.contains('active')) {
                 if (typeof renderShopItems === 'function') {
@@ -3288,29 +3290,33 @@ window.onload = function() {
                 }
             }
 
-            // 시트 데이터 갱신
+            // 캐릭터 상세 시트(골드, 경험치 등) 실시간 갱신
             if (typeof currentJob !== 'undefined' && currentJob && charData[currentJob]) {
                 const c = charData[currentJob];
+                
                 const gIn = document.getElementById('gold-input') || document.getElementById('input-gold');
                 const eIn = document.getElementById('exp-input') || document.getElementById('input-exp');
                 const pDisp = document.getElementById('perk-count') || document.getElementById('display-perk-points');
 
+                // 사용자가 입력 중이지 않을 때만 서버 값으로 덮어쓰기 (입력 방해 금지)
                 if (gIn && document.activeElement !== gIn) gIn.value = c.gold || 0;
                 if (eIn && document.activeElement !== eIn) eIn.value = c.exp || 0;
                 if (pDisp) pDisp.innerText = c.perkPoints || 0;
 
+                // 관련 UI 컴포넌트들 리렌더링
                 if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
                 if (typeof updateExpBar === 'function') updateExpBar();
                 if (typeof renderBagItems === 'function') renderBagItems('전체');
             }
 
+            // 시나리오 목록 실시간 갱신
             if (typeof renderScenarios === 'function') renderScenarios();
         }
 
+        // 마지막으로 브라우저 로컬 저장소에 백업
         localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
     });
 };
-
 </script>
 </body>
 </html>
