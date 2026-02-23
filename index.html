@@ -1092,48 +1092,14 @@ if (!firebase.apps.length) {
 }
 const database = firebase.database();
 
-// [2] 전역 변수 설정 (중복 선언 제거 및 단일화)
-let parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
-let currentPartyIndex = localStorage.getItem('gloomhaven_currentPartyIndex') !== null 
-    ? parseInt(localStorage.getItem('gloomhaven_currentPartyIndex')) 
-    : null;
-let currentJob = '';
-let activeExpandedJob = null;
-let isLocalUpdate = false;
-let unlockedItemIds = [];
+
 
 
 
     // 레벨업 테이블 (경험치 기준)
     const lvTable = [0, 45, 95, 150, 210, 275, 345, 420, 500];
 
-    
-let charData = {
-    '적위병': { 
-        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
-        perkPoints: 0, 
-        battleGoals: [false, false, false], 
-        checkedPerks: {} 
-    },
-    '도끼투척수': { 
-        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
-        perkPoints: 0, 
-        battleGoals: [false, false, false], 
-        checkedPerks: {} 
-    },
-    '철거전문가': { 
-        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
-        perkPoints: 0, 
-        battleGoals: [false, false, false], 
-        checkedPerks: {} 
-    },
-    '공허감시자': { 
-        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
-        perkPoints: 0, 
-        battleGoals: [false, false, false], 
-        checkedPerks: {} 
-    }
-};
+
 	const itemData = [
     { id: 1, name: "독수리 눈 고글", price: 30, stock: 2, type: "투구", owners: [] },
     { id: 2, name: "철 투구", price: 20, stock: 2, type: "투구", owners: [] },
@@ -1201,12 +1167,65 @@ const initialScenarios = {
     25: { title: "사자의 턱", state: "locked", reward: "#36 제트 장화", unlockItem: 36, treasure: "없음", next: [], locks: [], treasureOwner: null }
 };
 
+
+    
+let charData = {
+    '적위병': { 
+        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
+        perkPoints: 0, 
+        battleGoals: [false, false, false], 
+        checkedPerks: {} 
+    },
+    '도끼투척수': { 
+        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
+        perkPoints: 0, 
+        battleGoals: [false, false, false], 
+        checkedPerks: {} 
+    },
+    '철거전문가': { 
+        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
+        perkPoints: 0, 
+        battleGoals: [false, false, false], 
+        checkedPerks: {} 
+    },
+    '공허감시자': { 
+        playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], 
+        perkPoints: 0, 
+        battleGoals: [false, false, false], 
+        checkedPerks: {} 
+    }
+};
+
+// [2] 전역 변수 설정 (중복 선언 제거 및 단일화)
+let parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
+let currentPartyIndex = localStorage.getItem('gloomhaven_currentPartyIndex') !== null 
+    ? parseInt(localStorage.getItem('gloomhaven_currentPartyIndex')) 
+    : null;
+let currentJob = '';
+let activeExpandedJob = null;
+let isLocalUpdate = false;
+let unlockedItemIds = [];
 let scenarios = JSON.parse(JSON.stringify(initialScenarios));
+
+
 	
 database.ref('parties/').on('value', function(snapshot) {
-    if (window.isLocalUpdate) return;
+    console.log("Firebase 리스너: 데이터 수신됨!"); // <- 이 로그가 찍히는지 확인하세요
+    
+    if (window.isLocalUpdate) {
+        console.log("로컬 업데이트 중이어서 수신을 건너뜁니다.");
+        return;
+    }
+    
     const data = snapshot.val();
-    if (!data) return;
+    console.log("수신 데이터 상세:", data); // <- 데이터 내용 확인
+
+    if (!data) {
+        console.log("서버에 파티 데이터가 없습니다.");
+        parties = [];
+        if (typeof renderPartyList === 'function') renderPartyList();
+        return;
+    }
 
     // 객체 형태를 배열로 변환
     parties = Array.isArray(data) ? data : Object.values(data);
@@ -1219,13 +1238,13 @@ database.ref('parties/').on('value', function(snapshot) {
         if (currentParty.characters) charData = currentParty.characters;
         unlockedItemIds = currentParty.unlockedItemIds || [];
 
-        // UI 갱신 (함수 존재 여부 체크)
+        // UI 갱신
         if (typeof renderScenarios === 'function') renderScenarios();
         if (typeof renderJobCards === 'function') renderJobCards();
         if (typeof updateDifficultyBar === 'function') updateDifficultyBar();
+        console.log("선택된 파티 UI 동기화 완료");
     }
     
-    // 파티 목록은 인덱스 상관없이 항상 갱신
     if (typeof renderPartyList === 'function') renderPartyList();
 });
 
