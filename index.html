@@ -1173,7 +1173,7 @@ let charData = {
     { id: 36, name: "제트 장화", price: 30, stock: 1, type: "신발", owners: [] }
 ];
 
-let scenarios = {
+const initialScenarios = {
     1: { title: "길 가던 중의 습격", state: "unlocked", reward: "없음", unlockItem: null, treasure: "없음", next: [2], locks: [], treasureOwner: null },
     2: { title: "구멍 난 벽", state: "locked", reward: "각 +25G, 아이템 1~13 해금", unlockItem: [1,2,3,4,5,6,7,8,9,10,11,12,13], treasure: [{ id: 14, content: "🪙x3",owner: null}], next: [3], locks: [], treasureOwner: null },
     3: { title: "검은 배", state: "locked", reward: "각 1특혜포인트", unlockItem: null, treasure: "없음", next: [4], locks: [], treasureOwner: null },
@@ -1200,6 +1200,8 @@ let scenarios = {
     24: { title: "고대의 부름", state: "locked", reward: "#35 명령의 로브", unlockItem: 35, treasure: "없음", next: [], locks: [], treasureOwner: null },
     25: { title: "사자의 턱", state: "locked", reward: "#36 제트 장화", unlockItem: 36, treasure: "없음", next: [], locks: [], treasureOwner: null }
 };
+
+let scenarios = JSON.parse(JSON.stringify(initialScenarios));
 	
 database.ref('parties/').on('value', function(snapshot) {
     if (window.isLocalUpdate) return;
@@ -1296,10 +1298,7 @@ function confirmPartyName() {
     const name = input ? input.value.trim() : "";
     if (!name) { alert("파티 이름을 입력해주세요."); return; }
 
-    // [중요] 기존 메모리에 남은 charData를 완전히 비움 (이전 파티 이름 잔상 제거)
-    charData = {};
-
-    // 100% 새로운 객체로 생성 (공동 참조 방지)
+    // 1. 캐릭터 초기 데이터
     const initialCharacters = {
         "적위병": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
         "공허감시자": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
@@ -1307,17 +1306,14 @@ function confirmPartyName() {
         "도끼투척수": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} }
     };
 
-    let initialScenarios = {};
-    if (typeof scenarios !== 'undefined' && Object.keys(scenarios).length > 0) {
-        // Deep Copy: 원본 데이터가 아닌 '복사본'을 파티에 할당
-        initialScenarios = JSON.parse(JSON.stringify(scenarios));
-    }
+    // [핵심 수정] 2. 현재 scenarios 변수가 아니라, '원본' initialScenarios를 복사합니다.
+    // 만약 initialScenarios를 선언하지 않았다면, 여기서 직접 초기 객체를 넣어주세요.
+    const newScenarios = JSON.parse(JSON.stringify(initialScenarios));
 
     const newParty = {
         partyName: name,
-        // JSON 변환을 통해 메모리 주소를 완전히 끊어버림 (데이터 전이 방지)
         characters: JSON.parse(JSON.stringify(initialCharacters)),
-        scenarios: initialScenarios,
+        scenarios: newScenarios, // 깨끗한 시나리오 할당
         unlockedItemIds: []
     };
 
@@ -1325,19 +1321,24 @@ function confirmPartyName() {
     parties.push(newParty);
     currentPartyIndex = parties.length - 1;
 
-    // 현재 세션 변수 업데이트
+    // 3. 전역 변수 즉시 업데이트
     charData = newParty.characters;
     window.scenarios = newParty.scenarios;
     unlockedItemIds = [];
 
+    // 4. 저장 및 UI 갱신
     saveAllParties(); 
     
     if (typeof closeModal === 'function') closeModal('modal-party-name');
-    if (input) input.value = ''; // 입력창 비우기
+    if (input) input.value = '';
 
-    // UI 동기화
     window.renderPartyList();
+    
+    // 파티 선택 화면으로 이동 및 UI 새로고침
     window.selectParty(currentPartyIndex);
+    
+    // 데이터가 꼬이는 것을 막기 위해 새로고침 권장
+    setTimeout(() => { location.reload(); }, 500);
 }
 window.confirmPartyName = confirmPartyName;
 
@@ -1395,27 +1396,36 @@ window.deleteParty = deleteParty;
 function executePartyDelete() {
     if (partyIndexToDelete === null) return;
 
-    // 현재 보고 있는 파티를 삭제하는 경우 메모리 완전 초기화
+    // 1. 메모리 초기화 로직
     if (currentPartyIndex === partyIndexToDelete) {
         currentPartyIndex = null;
-        charData = {};
-        window.scenarios = {};
+        localStorage.removeItem('gloomhaven_currentPartyIndex'); // 저장된 선택 정보 삭제
+        
+        // 중요: 빈 객체{}가 아니라 초기 데이터로 복구
+        charData = {}; 
+        scenarios = JSON.parse(JSON.stringify(initialScenarios)); 
         unlockedItemIds = [];
-        if (typeof showScreen === 'function') showScreen('screen-home');
     } else if (currentPartyIndex > partyIndexToDelete) {
         currentPartyIndex--;
+        localStorage.setItem('gloomhaven_currentPartyIndex', currentPartyIndex);
     }
 
+    // 2. 배열에서 삭제
     parties.splice(partyIndexToDelete, 1);
-    saveAllParties(); 
-    window.renderPartyList();
-    
-    if (typeof closeModal === 'function') closeModal('modal-delete-party-confirm');
+
+    // 3. Firebase 동기화 (전체 파티 목록을 새로 덮어쓰기)
+    // 데이터가 꼬이지 않도록 parties 배열 전체를 .set() 해주는 것이 안전합니다.
+    database.ref('parties/').set(parties).then(() => {
+        if (typeof renderPartyList === 'function') renderPartyList();
+        if (typeof closeModal === 'function') closeModal('modal-delete-party-confirm');
+        
+        // 4. 페이지 새로고침 (메모리 꼬임 방지 최후의 수단)
+        location.reload(); 
+    });
+
     partyIndexToDelete = null;
-    
-    if (typeof showAlert === 'function') {
-        showAlert("삭제 완료", "파티 데이터가 영구적으로 삭제되었습니다.");
-    }
+}
+
 }function saveAllParties() {
     // [잠금] 저장 중 서버 신호 무시
     if (typeof isLocalUpdate !== 'undefined') isLocalUpdate = true;
