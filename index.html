@@ -1409,38 +1409,68 @@ window.confirmPartyName = confirmPartyName;
 /**
  * 4. 파티 선택 함수
  */
-window.selectParty = function(index) {
-    if (index === null || !parties[index]) return;
+function selectParty(index) {
+    if (index === null || !parties[index]) {
+        console.error("선택한 인덱스에 파티 데이터가 없습니다:", index);
+        return;
+    }
+    
+    console.log(`${parties[index].partyName} 파티 진입 시도 (Index: ${index})`);
     
     currentPartyIndex = index;
+    localStorage.setItem('gloomhaven_currentPartyIndex', index);
+    
     const selected = parties[index];
 
-    // 데이터 할당
+    // 1. 데이터 할당
     charData = JSON.parse(JSON.stringify(selected.characters || {}));
     window.scenarios = JSON.parse(JSON.stringify(selected.scenarios || {}));
     unlockedItemIds = JSON.parse(JSON.stringify(selected.unlockedItemIds || []));
 
-    // UI 이름 변경
+    // 2. UI 텍스트 업데이트
     const displayEl = document.getElementById('display-party-name');
     if (displayEl) displayEl.innerText = selected.partyName;
     
-    console.log("전환 시도: " + selected.partyName + " 화면으로!");
-    
-    // 화면 전환 실행
+    // 3. [강력 수정] 화면 전환 강제 실행
+    // showScreen을 호출하되, 수동으로 한 번 더 확실히 처리합니다.
     if (typeof showScreen === 'function') {
         showScreen('screen-job-select');
     }
 
-    // 캐릭터 카드 및 시나리오 리렌더링
+    // 모든 스크린 요소를 직접 찾아서 숨기고 대상만 켭니다.
+    const screens = document.querySelectorAll('.screen, section');
+    screens.forEach(s => {
+        s.classList.add('hidden');
+        s.style.setProperty('display', 'none', 'important'); 
+    });
+
+    const targetScreen = document.getElementById('screen-job-select');
+    if (targetScreen) {
+        targetScreen.classList.remove('hidden');
+        targetScreen.style.setProperty('display', 'flex', 'important');
+        targetScreen.style.flexDirection = 'column';
+        console.log("강제 화면 전환 완료: screen-job-select");
+    }
+
+    // 4. 데이터 기반 UI 렌더링
     if (typeof renderJobCards === 'function') renderJobCards();
     if (typeof renderScenarios === 'function') renderScenarios();
 
-    // 개별 직업 카드 동기화
     Object.keys(charData).forEach(job => {
         if (typeof syncJobCard === 'function') syncJobCard(job);
     });
-};
-/**
+
+    // 5. 파티 리스트 창 닫기
+    const list = document.getElementById('party-list');
+    if (list) {
+        list.classList.add('hidden');
+        list.style.display = 'none';
+    }
+    
+    window.scrollTo(0, 0);
+}
+
+window.selectParty = selectParty;/**
  * 5. 파티 삭제 로직
  */
 function deleteParty(index) {
