@@ -3238,7 +3238,7 @@ window.onload = function() {
             const currentParty = data[currentPartyIndex];
 
             // 3. 시나리오 데이터 복구 (수정된 핵심 로직)
-            // 서버에 시나리오 데이터가 실제로 존재할 때만 로컬 변수를 덮어씁니다.
+            // 서버에 시나리오 데이터가 실제로 존재할 때만 로컬 변수를 덮어씁니다
             if (currentParty.scenarios && Object.keys(currentParty.scenarios).length > 0) {
                 scenarios = currentParty.scenarios;
             } else {
