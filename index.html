@@ -1325,40 +1325,57 @@ function confirmPartyName() {
         "도끼투척수": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} }
     };
 
-    // [핵심 수정] 2. 현재 scenarios 변수가 아니라, '원본' initialScenarios를 복사합니다.
-    // 만약 initialScenarios를 선언하지 않았다면, 여기서 직접 초기 객체를 넣어주세요.
-    const newScenarios = JSON.parse(JSON.stringify(initialScenarios));
-
+    // 2. 새로운 파티 객체 생성 (원본 데이터 복사)
     const newParty = {
         partyName: name,
         characters: JSON.parse(JSON.stringify(initialCharacters)),
-        scenarios: newScenarios, // 깨끗한 시나리오 할당
+        scenarios: JSON.parse(JSON.stringify(initialScenarios)), // 전역 원본 사용
         unlockedItemIds: []
     };
 
+    // 3. 배열 업데이트
     if (!Array.isArray(parties)) parties = [];
     parties.push(newParty);
-    currentPartyIndex = parties.length - 1;
+    
+    // 새 파티의 인덱스 확정
+    const newIndex = parties.length - 1;
+    currentPartyIndex = newIndex;
 
-    // 3. 전역 변수 즉시 업데이트
+    // 4. 로컬 스토리지에 미리 저장 (새로고침 후에도 이 파티를 기억하도록)
+    localStorage.setItem('gloomhaven_currentPartyIndex', newIndex);
+
+    // 5. 전역 변수 즉시 동기화 (진입 전 메모리 세팅)
     charData = newParty.characters;
     window.scenarios = newParty.scenarios;
     unlockedItemIds = [];
 
-    // 4. 저장 및 UI 갱신
-    saveAllParties(); 
-    
-    if (typeof closeModal === 'function') closeModal('modal-party-name');
-    if (input) input.value = '';
+    // 6. [중요] 서버 저장 후 "성공했을 때" 다음 단계로 진행
+    window.isLocalUpdate = true; // 리스너 방해 금지
+    database.ref('parties').set(parties)
+        .then(() => {
+            console.log("새 파티 서버 저장 완료");
+            
+            if (typeof closeModal === 'function') closeModal('modal-party-name');
+            if (input) input.value = '';
 
-    window.renderPartyList();
-    
-    // 파티 선택 화면으로 이동 및 UI 새로고침
-    window.selectParty(currentPartyIndex);
-    
-    // 데이터가 꼬이는 것을 막기 위해 새로고침 권장
-    setTimeout(() => { location.reload(); }, 500);
+            // 파티 목록 UI 갱신
+            if (typeof renderPartyList === 'function') renderPartyList();
+            
+            // 파티 선택 함수 호출 (화면 전환 로직 포함됨)
+            window.selectParty(newIndex);
+            
+            // 7. 모든 처리가 끝난 후 약간의 지연을 두고 새로고침 (데이터 안정성)
+            setTimeout(() => { 
+                window.isLocalUpdate = false;
+                location.reload(); 
+            }, 800);
+        })
+        .catch((err) => {
+            console.error("저장 실패:", err);
+            window.isLocalUpdate = false;
+        });
 }
+
 window.confirmPartyName = confirmPartyName;
 
 /**
