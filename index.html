@@ -3305,7 +3305,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (currentPartyIndex !== null && data[currentPartyIndex]) {
             const currentParty = data[currentPartyIndex];
 
+<<<<<<< HEAD
             // 2. 시나리오 및 캐릭터 데이터 복구
+=======
+            // 3. 시나리오 데이터 복구 (수정된 핵심 로직)
+            // 서버에 시나리오 데이터가 실제로 존재할 때만 로컬 변수를 덮어씁니다
+>>>>>>> f982d07c093d17b533a16dd04561fbcc315e063f
             if (currentParty.scenarios && Object.keys(currentParty.scenarios).length > 0) {
                 // 전역 변수 scenarios와 window.scenarios 둘 다 갱신
                 window.scenarios = currentParty.scenarios;
