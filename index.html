@@ -566,6 +566,10 @@ html, body {
 </head>
 <body>
 
+<style>
+    /* 이 코드가 있어야 '숨기기/보이기'가 작동합니다 */
+    .hidden { display: none !important; }
+</style>
 
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap" rel="stylesheet">
     <div id="app">
@@ -578,12 +582,12 @@ html, body {
         <button class="btn-confirm" style="width: 240px; padding: 15px;" onclick="openModal('modal-party-name')">새 파티 만들기</button>
         
         <button style="background: #333; width: 240px; padding: 12px; color: white; border: none; border-radius: 8px; cursor: pointer;" 
-                onclick="document.getElementById('party-list').classList.toggle('hidden'); renderPartyList();">
-            기존 파티 목록
-        </button>
+        onclick="window.togglePartyList()">
+    기존 파티 목록
+</button>
 
-        <ul id="party-list" style="list-style: none; padding: 0; background: var(--card-bg); width: 240px; border: 1px solid var(--border); border-radius: 8px; margin-top: 5px; overflow-y: auto; max-height: 200px;">
-            </ul>
+<ul id="party-list" class="hidden" style="list-style: none; padding: 0; background: var(--card-bg); width: 240px; border: 1px solid var(--border); border-radius: 8px; margin-top: 5px; overflow-y: auto; max-height: 200px;">
+</ul>
     </div>
 </section>
 
@@ -1072,6 +1076,7 @@ html, body {
 
 <script>
 
+// [1] 파이어베이스 초기화 (설정값 유지)
 const firebaseConfig = {
   apiKey: "AIzaSyB4uSsNsrb44niEckclKnxPCFa8CRxs40c",
   authDomain: "gh-jotl.firebaseapp.com",
@@ -1082,11 +1087,20 @@ const firebaseConfig = {
   appId: "1:467051482347:web:1247b5c52fcd37685602ae"
 };
 
-  // 파이어베이스 초기화
-  firebase.initializeApp(firebaseConfig);
-  const database = firebase.database();
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const database = firebase.database();
 
-
+// [2] 전역 변수 설정 (중복 선언 제거 및 단일화)
+let parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
+let currentPartyIndex = localStorage.getItem('gloomhaven_currentPartyIndex') !== null 
+    ? parseInt(localStorage.getItem('gloomhaven_currentPartyIndex')) 
+    : null;
+let currentJob = '';
+let activeExpandedJob = null;
+let isLocalUpdate = false;
+let unlockedItemIds = [];
 
 
 
@@ -1187,15 +1201,62 @@ let scenarios = {
     25: { title: "사자의 턱", state: "locked", reward: "#36 제트 장화", unlockItem: 36, treasure: "없음", next: [], locks: [], treasureOwner: null }
 };
 	
+database.ref('parties/').on('value', function(snapshot) {
+    if (window.isLocalUpdate) return;
+    const data = snapshot.val();
+    if (!data) return;
+
+    // 객체 형태를 배열로 변환
+    parties = Array.isArray(data) ? data : Object.values(data);
+    
+    // 현재 선택된 파티가 있다면 데이터 동기화
+    if (currentPartyIndex !== null && parties[currentPartyIndex]) {
+        const currentParty = parties[currentPartyIndex];
+        
+        if (currentParty.scenarios) scenarios = currentParty.scenarios;
+        if (currentParty.characters) charData = currentParty.characters;
+        unlockedItemIds = currentParty.unlockedItemIds || [];
+
+        // UI 갱신 (함수 존재 여부 체크)
+        if (typeof renderScenarios === 'function') renderScenarios();
+        if (typeof renderJobCards === 'function') renderJobCards();
+        if (typeof updateDifficultyBar === 'function') updateDifficultyBar();
+    }
+    
+    // 파티 목록은 인덱스 상관없이 항상 갱신
+    if (typeof renderPartyList === 'function') renderPartyList();
+});
+
+window.selectParty = function(index) {
+    currentPartyIndex = index;
+    localStorage.setItem('gloomhaven_currentPartyIndex', index);
+    
+    // 선택 후 Firebase에서 데이터를 다시 불러오도록 트리거 (한 번 더 갱신)
+    database.ref('parties/').once('value').then(snapshot => {
+        const data = snapshot.val();
+        if (data && data[index]) {
+            const p = data[index];
+            if (p.scenarios) scenarios = p.scenarios;
+            if (p.characters) charData = p.characters;
+            unlockedItemIds = p.unlockedItemIds || [];
+            
+            if (typeof renderScenarios === 'function') renderScenarios();
+            if (typeof renderJobCards === 'function') renderJobCards();
+        }
+    });
+};
+
+// [4] 전역 헬퍼 함수
+window.togglePartyList = function() {
+    const list = document.getElementById('party-list');
+    if (!list) return;
+    list.classList.toggle('hidden');
+    if (!list.classList.contains('hidden') && typeof renderPartyList === 'function') {
+        renderPartyList();
+    }
+};	
 	
-	
-// [1] 변수 선언부
-let unlockedItemIds = [];
-let activeExpandedJob = null;
-let currentJob = '';
-let parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
-let currentPartyIndex = null; 
-let isLocalUpdate = false; 
+
 
 function renderPartyList() {
     const listContainer = document.getElementById('party-list');
@@ -3222,56 +3283,52 @@ function openCityEventMode() {
     renderCityEventContent();
 }
 
-window.onload = function() {
+// window.onload 대신 더 안전한 방식으로 변경
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("Firebase 리스너 연결 시도...");
+
+    // 데이터베이스 연결 확인
+    if (typeof database === 'undefined') {
+        console.error("Firebase 'database'가 정의되지 않았습니다. 스크립트 순서를 확인하세요.");
+        return;
+    }
+
     database.ref('parties/').on('value', function(snapshot) {
-        // 1. 로컬 업데이트 중이면 리스너 중단
         if (window.isLocalUpdate) return;
 
         const data = snapshot.val();
         if (!data) return;
 
-        // 2. 전체 파티 데이터 갱신
+        // 1. 데이터 갱신
         parties = Array.isArray(data) ? data : Object.values(data);
         
-        // currentPartyIndex가 유효한지 확인
         if (currentPartyIndex !== null && data[currentPartyIndex]) {
             const currentParty = data[currentPartyIndex];
 
-            // 3. 시나리오 데이터 복구 (수정된 핵심 로직)
-            // 서버에 시나리오 데이터가 실제로 존재할 때만 로컬 변수를 덮어씁니다.
+            // 2. 시나리오 및 캐릭터 데이터 복구
             if (currentParty.scenarios && Object.keys(currentParty.scenarios).length > 0) {
-                scenarios = currentParty.scenarios;
-            } else {
-                // 서버에 데이터가 없거나 비어있다면, 
-                // 코드 상단에 정의된 기본 시나리오 25개를 그대로 유지합니다.
-                console.log("서버 데이터가 비어있어 코드 기본 시나리오를 유지합니다.");
+                // 전역 변수 scenarios와 window.scenarios 둘 다 갱신
+                window.scenarios = currentParty.scenarios;
+                if (typeof scenarios !== 'undefined') scenarios = currentParty.scenarios;
             }
 
-            // 4. 캐릭터 데이터 복구
             if (currentParty.characters) {
-                Object.keys(charData).forEach(job => {
-                    if (currentParty.characters[job]) {
-                        charData[job] = currentParty.characters[job];
-                    }
-                });
+                charData = currentParty.characters;
             }
             
             unlockedItemIds = currentParty.unlockedItemIds || [];
 
-            // 5. UI 강제 갱신
-            if (typeof renderScenarios === 'function') {
-                renderScenarios(); 
-            }
-
+            // 3. UI 업데이트 (안전한 호출)
+            if (typeof renderScenarios === 'function') renderScenarios();
             if (typeof renderJobCards === 'function') {
                 renderJobCards();
             } else {
+                // 수동 UI 업데이트 로직 (기존 유지)
                 const jobs = ['적위병', '도끼투척수', '철거전문가', '공허감시자'];
                 jobs.forEach(job => {
                     const tagEl = document.getElementById('tag-' + job);
                     const cardEl = document.getElementById('card-' + job);
                     const name = charData[job] ? charData[job].playerName : "";
-
                     if (tagEl) tagEl.innerText = name || '선택 가능';
                     if (cardEl) {
                         if (name) cardEl.classList.add('occupied');
@@ -3283,8 +3340,11 @@ window.onload = function() {
             
             if (typeof updateDifficultyBar === 'function') updateDifficultyBar();
         }
+        
+        // 4. 파티 목록 렌더링 (추가)
+        if (typeof window.renderPartyList === 'function') window.renderPartyList();
     });
-};
+}); 	
 </script>
 </body>
 </html>
