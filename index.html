@@ -1279,12 +1279,12 @@ window.togglePartyList = function() {
 	
 
 
+// 1. 파티 목록 렌더링 함수
 function renderPartyList() {
     const listContainer = document.getElementById('party-list');
     if (!listContainer) return;
     
     listContainer.innerHTML = '';
-
     const currentParties = window.parties || (typeof parties !== 'undefined' ? parties : []);
 
     if (currentParties.length === 0) {
@@ -1297,68 +1297,74 @@ function renderPartyList() {
         li.style = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); background: #222;";
         
         li.innerHTML = `
-            <div onclick="handlePartySelect(${index})" 
+            <div class="party-select-btn" 
                  style="padding: 15px; color: var(--accent); flex: 1; cursor: pointer; font-size: 0.9rem; font-weight: bold;">
                 🏰 ${party.partyName}
             </div>
-            <div onclick="handlePartyDelete(${index})" 
+            <div class="party-delete-btn" 
                  style="padding: 15px; color: #ff4444; cursor: pointer; font-weight: bold; font-size: 1.1rem; width: 45px; text-align: center;">
                 ✕
             </div>
         `;
+
+        // JS에서 직접 이벤트 할당 (가장 충돌 없는 방식)
+        li.querySelector('.party-select-btn').addEventListener('click', () => {
+            window.handlePartySelect(index);
+        });
+
+        li.querySelector('.party-delete-btn').addEventListener('click', (e) => {
+            e.stopPropagation(); // 진입 이벤트 방지
+            window.handlePartyDelete(index);
+        });
+
         listContainer.appendChild(li);
     });
 }
 
-// 1. 파티 선택 시 진입 핸들러
+// 2. 파티 선택 및 진입 핸들러
 window.handlePartySelect = function(index) {
-    console.log("파티 선택됨:", index);
+    console.log("파티 진입 시도 - 인덱스:", index);
+    
+    // 목록 창 닫기
     const list = document.getElementById('party-list');
     if (list) list.classList.add('hidden');
 
+    // selectParty 함수 호출
     if (typeof window.selectParty === 'function') {
         window.selectParty(index);
+    } else {
+        console.error("selectParty 함수를 찾을 수 없습니다.");
     }
 };
 
-// 2. 파티 삭제 버튼 클릭 핸들러 (기본 confirm 제거)
+// 3. 파티 삭제 모달 핸들러 (기본 confirm 제거 버전)
 window.handlePartyDelete = function(index) {
-    // 삭제할 인덱스 저장
     window.pendingDeleteIndex = index;
-
-    // 모달 텍스트 업데이트
-    const msgEl = document.getElementById('delete-party-msg');
     const currentParties = window.parties || parties;
+    
+    const msgEl = document.getElementById('delete-party-msg');
     if (msgEl && currentParties[index]) {
         msgEl.innerHTML = `<strong>'${currentParties[index].partyName}'</strong> 파티를 삭제하시겠습니까?<br><span style="font-size: 0.8rem; color: #888;">(삭제된 데이터는 복구할 수 없습니다.)</span>`;
     }
 
-    // 기본 confirm 없이 바로 커스텀 모달 오픈
     if (typeof openModal === 'function') {
         openModal('modal-delete-party-confirm');
     }
 };
 
-// 3. 모달 내부 '삭제하기' 버튼에 대한 최종 실행 리스너 등록
-// (이 코드는 스크립트 로드 시 한 번만 실행되도록 두시면 됩니다)
+// 4. 모달 내 진짜 삭제 버튼 클릭 이벤트 (한 번만 등록)
 const finalDeleteBtn = document.getElementById('btn-party-delete-final');
 if (finalDeleteBtn) {
     finalDeleteBtn.onclick = function() {
-        const index = window.pendingDeleteIndex;
-        if (index !== null && index !== undefined) {
-            if (typeof window.deleteParty === 'function') {
-                window.deleteParty(index);
-            }
-            if (typeof closeModal === 'function') {
-                closeModal('modal-delete-party-confirm');
-            }
+        if (window.pendingDeleteIndex !== null && typeof window.deleteParty === 'function') {
+            window.deleteParty(window.pendingDeleteIndex);
+            closeModal('modal-delete-party-confirm');
             window.pendingDeleteIndex = null;
         }
     };
 }
 
 window.renderPartyList = renderPartyList;
-
 /**
  * 3. 파티 생성 확인 함수 (핵심 수정: 데이터 오염 방지)
  */
