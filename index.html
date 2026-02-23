@@ -1285,7 +1285,6 @@ function renderPartyList() {
     
     listContainer.innerHTML = '';
 
-    // 전역 변수 parties가 있는지 확인
     const currentParties = window.parties || (typeof parties !== 'undefined' ? parties : []);
 
     if (currentParties.length === 0) {
@@ -1295,7 +1294,6 @@ function renderPartyList() {
 
     currentParties.forEach((party, index) => {
         const li = document.createElement('li');
-        // 스타일: 기존 디자인 유지 + 배경색 지정으로 가독성 확보
         li.style = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); background: #222;";
         
         li.innerHTML = `
@@ -1312,30 +1310,54 @@ function renderPartyList() {
     });
 }
 
-// 클릭 이벤트 핸들러 분리 (오작동 방지)
+// 1. 파티 선택 시 진입 핸들러
 window.handlePartySelect = function(index) {
     console.log("파티 선택됨:", index);
-    
-    // 1. 파티 목록창 닫기
     const list = document.getElementById('party-list');
     if (list) list.classList.add('hidden');
 
-    // 2. 데이터 세팅 및 화면 전환
     if (typeof window.selectParty === 'function') {
         window.selectParty(index);
     }
 };
 
+// 2. 파티 삭제 버튼 클릭 핸들러 (기본 confirm 제거)
 window.handlePartyDelete = function(index) {
-    if (confirm("정말 이 파티를 삭제하시겠습니까?")) {
-        if (typeof window.deleteParty === 'function') {
-            window.deleteParty(index);
-        }
+    // 삭제할 인덱스 저장
+    window.pendingDeleteIndex = index;
+
+    // 모달 텍스트 업데이트
+    const msgEl = document.getElementById('delete-party-msg');
+    const currentParties = window.parties || parties;
+    if (msgEl && currentParties[index]) {
+        msgEl.innerHTML = `<strong>'${currentParties[index].partyName}'</strong> 파티를 삭제하시겠습니까?<br><span style="font-size: 0.8rem; color: #888;">(삭제된 데이터는 복구할 수 없습니다.)</span>`;
+    }
+
+    // 기본 confirm 없이 바로 커스텀 모달 오픈
+    if (typeof openModal === 'function') {
+        openModal('modal-delete-party-confirm');
     }
 };
 
-window.renderPartyList = renderPartyList;
+// 3. 모달 내부 '삭제하기' 버튼에 대한 최종 실행 리스너 등록
+// (이 코드는 스크립트 로드 시 한 번만 실행되도록 두시면 됩니다)
+const finalDeleteBtn = document.getElementById('btn-party-delete-final');
+if (finalDeleteBtn) {
+    finalDeleteBtn.onclick = function() {
+        const index = window.pendingDeleteIndex;
+        if (index !== null && index !== undefined) {
+            if (typeof window.deleteParty === 'function') {
+                window.deleteParty(index);
+            }
+            if (typeof closeModal === 'function') {
+                closeModal('modal-delete-party-confirm');
+            }
+            window.pendingDeleteIndex = null;
+        }
+    };
+}
 
+window.renderPartyList = renderPartyList;
 
 /**
  * 3. 파티 생성 확인 함수 (핵심 수정: 데이터 오염 방지)
