@@ -1409,57 +1409,37 @@ window.confirmPartyName = confirmPartyName;
 /**
  * 4. 파티 선택 함수
  */
-function selectParty(index) {
-    // 0. 방어 로직 및 로그
-    if (index === null || !parties[index]) {
-        console.error("선택한 인덱스에 파티 데이터가 없습니다:", index);
-        return;
-    }
-    
-    console.log(`${parties[index].partyName} 파티로 진입을 시도합니다. (Index: ${index})`);
+window.selectParty = function(index) {
+    if (index === null || !parties[index]) return;
     
     currentPartyIndex = index;
-    localStorage.setItem('gloomhaven_currentPartyIndex', index);
-    
     const selected = parties[index];
 
-    // 1. 선택된 파티의 데이터를 전역 변수에 할당
+    // 데이터 할당
     charData = JSON.parse(JSON.stringify(selected.characters || {}));
     window.scenarios = JSON.parse(JSON.stringify(selected.scenarios || {}));
     unlockedItemIds = JSON.parse(JSON.stringify(selected.unlockedItemIds || []));
 
-    // 2. UI 표시 업데이트 (파티 이름)
+    // UI 이름 변경
     const displayEl = document.getElementById('display-party-name');
     if (displayEl) displayEl.innerText = selected.partyName;
     
-    // 3. 화면 전환 (가장 중요한 부분)
+    console.log("전환 시도: " + selected.partyName + " 화면으로!");
+    
+    // 화면 전환 실행
     if (typeof showScreen === 'function') {
-        console.log("showScreen 함수를 실행합니다: screen-job-select");
         showScreen('screen-job-select');
-    } else {
-        console.warn("showScreen 함수가 정의되지 않아 직접 클래스를 조작합니다.");
-        // 직접 전환 시도 (ID가 일치해야 함)
-        const home = document.getElementById('screen-home');
-        const target = document.getElementById('screen-job-select');
-        if (home) home.classList.add('hidden');
-        if (target) target.classList.remove('hidden');
     }
 
-    // 4. 데이터 기반 UI 렌더링
+    // 캐릭터 카드 및 시나리오 리렌더링
     if (typeof renderJobCards === 'function') renderJobCards();
     if (typeof renderScenarios === 'function') renderScenarios();
 
-    // 캐릭터 카드 세부 동기화
+    // 개별 직업 카드 동기화
     Object.keys(charData).forEach(job => {
         if (typeof syncJobCard === 'function') syncJobCard(job);
     });
-
-    // 5. 파티 리스트 창이 열려있다면 자동으로 닫기
-    const list = document.getElementById('party-list');
-    if (list) list.classList.add('hidden');
-}
-
-window.selectParty = selectParty;
+};
 /**
  * 5. 파티 삭제 로직
  */
@@ -1535,22 +1515,31 @@ function saveAllParties() {
         });
     }
 }
-// 추천하는 showScreen 수정 방식
+
+
+
 function showScreen(id) {
-    // 1. 모든 스크린에서 hidden 추가
+    console.log("showScreen 호출됨: ", id);
+
+    // 1. 모든 섹션/스크린을 찾아서 hidden 추가
     const allScreens = document.querySelectorAll('.screen, section');
     allScreens.forEach(s => {
         s.classList.add('hidden');
-        s.style.display = ''; // 인라인 스타일 제거 (CSS가 제어하게 함)
+        s.style.display = 'none'; // 강제 숨김
     });
 
-    // 2. 대상만 hidden 제거
+    // 2. 보여줄 대상만 선택
     const target = document.getElementById(id);
     if (target) {
         target.classList.remove('hidden');
-        // 필요한 경우에만 인라인 스타일 사용
-        if(id === 'screen-job-select') target.style.display = 'flex'; 
+        // 'screen-job-select'일 경우 flex로 보여줌
+        target.style.setProperty('display', 'flex', 'important'); 
+        target.style.flexDirection = 'column';
+        console.log("화면 노출 완료: ", id);
+    } else {
+        console.error("해당 ID의 화면을 찾을 수 없습니다: ", id);
     }
+    
     window.scrollTo(0, 0);
 }
 
