@@ -1285,56 +1285,58 @@ function renderPartyList() {
     
     listContainer.innerHTML = '';
 
-    // parties가 정의되지 않았을 경우를 대비해 window.parties 확인
-    const currentParties = window.parties || parties;
+    // 전역 변수 parties가 있는지 확인
+    const currentParties = window.parties || (typeof parties !== 'undefined' ? parties : []);
 
-    if (!currentParties || currentParties.length === 0) {
+    if (currentParties.length === 0) {
         listContainer.innerHTML = '<li style="padding: 15px; color: #666; font-size: 0.8rem; text-align: center;">생성된 파티가 없습니다.</li>';
         return;
     }
 
     currentParties.forEach((party, index) => {
         const li = document.createElement('li');
-        li.style = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); background: #222;"; // 배경색 추가
+        // 스타일: 기존 디자인 유지 + 배경색 지정으로 가독성 확보
+        li.style = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); background: #222;";
         
         li.innerHTML = `
-            <div class="party-click-zone" 
+            <div onclick="handlePartySelect(${index})" 
                  style="padding: 15px; color: var(--accent); flex: 1; cursor: pointer; font-size: 0.9rem; font-weight: bold;">
                 🏰 ${party.partyName}
             </div>
-            <div class="party-delete-zone" 
+            <div onclick="handlePartyDelete(${index})" 
                  style="padding: 15px; color: #ff4444; cursor: pointer; font-weight: bold; font-size: 1.1rem; width: 45px; text-align: center;">
                 ✕
             </div>
         `;
-
-        // 1. 파티 진입 클릭 이벤트
-        li.querySelector('.party-click-zone').addEventListener('click', () => {
-            console.log("선택된 파티 인덱스:", index);
-            
-            // 파티 목록창 닫기 (HTML에 hidden 클래스 사용 중이므로)
-            listContainer.classList.add('hidden');
-            
-            // 파티 선택 함수 호출
-            if (typeof window.selectParty === 'function') {
-                window.selectParty(index);
-            }
-        });
-
-        // 2. 파티 삭제 클릭 이벤트
-        li.querySelector('.party-delete-zone').addEventListener('click', (e) => {
-            e.stopPropagation(); // 진입 이벤트 실행 방지
-            if (confirm(`'${party.partyName}' 파티를 삭제하시겠습니까?`)) {
-                if (typeof window.deleteParty === 'function') {
-                    window.deleteParty(index);
-                }
-            }
-        });
-
         listContainer.appendChild(li);
     });
 }
+
+// 클릭 이벤트 핸들러 분리 (오작동 방지)
+window.handlePartySelect = function(index) {
+    console.log("파티 선택됨:", index);
+    
+    // 1. 파티 목록창 닫기
+    const list = document.getElementById('party-list');
+    if (list) list.classList.add('hidden');
+
+    // 2. 데이터 세팅 및 화면 전환
+    if (typeof window.selectParty === 'function') {
+        window.selectParty(index);
+    }
+};
+
+window.handlePartyDelete = function(index) {
+    if (confirm("정말 이 파티를 삭제하시겠습니까?")) {
+        if (typeof window.deleteParty === 'function') {
+            window.deleteParty(index);
+        }
+    }
+};
+
 window.renderPartyList = renderPartyList;
+
+
 /**
  * 3. 파티 생성 확인 함수 (핵심 수정: 데이터 오염 방지)
  */
