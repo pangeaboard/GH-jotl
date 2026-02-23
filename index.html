@@ -590,17 +590,33 @@ html, body {
 <section id="screen-job-select" class="screen hidden" style="padding: 20px 0;">
     <h2 id="display-party-name" style="color: var(--accent); font-size: 1.1rem; margin-bottom: 15px; padding: 0 20px; text-align: center;">파티이름</h2>
     
-    <div class="job-list-vertical" id="job-list-container" style="padding: 0 20px;">
-        <script>
-            // 여기서는 카드 생성에 필요한 정보만 선언
+    <div class="job-list-vertical" id="job-list-container" style="padding: 0 20 :px;">
+        </div>
+
+    <button onclick="showScreen('screen-home')" style="color:#666; background:none; border:none; margin-top:20px; font-size:0.8rem; width:100%; cursor:pointer;">
+        ← 처음으로 돌아가기
+    </button>
+
+    <script>
+        /**
+         * 캐릭터 카드 목록을 그리는 함수
+         * 디자인은 기존과 100% 동일하게 유지하면서 innerHTML 방식을 사용합니다.
+         */
+        function renderJobCards() {
+            const container = document.getElementById('job-list-container');
+            if (!container) return;
+
             const imgMap = { "적위병": "rg1", "도끼투척수": "hc1", "철거전문가": "dm1", "공허감시자": "vw1" };
             const jobsList = ['적위병', '도끼투척수', '철거전문가', '공허감시자'];
 
+            let finalHtml = '';
+
             jobsList.forEach(job => {
                 const selectImgUrl = `${imgMap[job]}.jpg`; 
+                // 데이터 존재 여부 확인 (charData는 전역 변수 참조)
                 const isOccupied = (typeof charData !== 'undefined' && charData[job] && charData[job].playerName);
 
-                document.write(`
+                finalHtml += `
                     <div class="job-card-v ${isOccupied ? 'occupied' : ''}" id="card-${job}" 
                          onclick="handleJobClick(event, '${job}')">
                         <img src="${selectImgUrl}" class="job-character-img" alt="${job}">
@@ -619,24 +635,15 @@ html, body {
                             ` : ''}
                         </div>
                     </div>
-                `);
+                `;
             });
 
-            // 클릭 시 JS 파일에 있는 openDetailSheet를 호출함
-            function handleJobClick(e, job) {
-                const card = document.getElementById(`card-${job}`);
-                if (card.classList.contains('occupied')) {
-                    if (typeof openDetailSheet === 'function') {
-                        openDetailSheet(job);
-                    }
-                }
-            }
-        </script>
-    </div>
+            container.innerHTML = finalHtml;
+        }
 
-    <button onclick="showScreen('screen-home')" style="color:#666; background:none; border:none; margin-top:20px; font-size:0.8rem; width:100%; cursor:pointer;">
-        ← 처음으로 돌아가기
-    </button>
+        // 주의: 기존에 있던 function handleJobClick은 여기서 삭제했습니다.
+        // 외부 JS 파일에 있는 '진짜' handleJobClick이 작동하도록 하기 위함입니다.
+    </script>
 </section>
 
  <section id="screen-scenario" class="screen hidden">
@@ -1192,80 +1199,47 @@ let scenarios = {
 
 // [통합 및 수정된 파티 생성 함수]
 function confirmPartyName() {
-    console.log("파티 생성 프로세스 시작");
     const input = document.getElementById('input-party-name');
     const name = input.value.trim();
-    
-    if (!name) {
-        alert("파티 이름을 입력해주세요.");
-        return;
-    }
+    if (!name) { alert("파티 이름을 입력해주세요."); return; }
 
-    // [핵심 수정] 기존 charData를 복사하지 않고, 모든 직업을 초기 상태로 정의합니다.
+    // 1. [명칭 수정] 파괴전사/공허수호자 등의 옛날 이름을 완전히 제거했습니다.
     const initialCharacters = {
         "적위병": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
-        "공허수호자": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
-        "파괴전사": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
+        "공허감시자": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
+        "철거전문가": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
         "도끼투척수": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} }
     };
 
-    // 1. 새 파티 데이터 객체 생성
+    // 2. [시나리오 복구] {} 대신 상단에 선언된 25개 기본 시나리오 데이터를 복사해 넣습니다.
+    // JSON.parse(JSON.stringify(scenarios))를 사용해 원본 데이터의 복사본을 만듭니다.
+    const initialScenarios = (typeof scenarios !== 'undefined' && Object.keys(scenarios).length > 0) 
+                             ? JSON.parse(JSON.stringify(scenarios)) 
+                             : {};
+
     const newParty = {
         partyName: name,
-        characters: initialCharacters, 
-        scenarios: {}, 
-        unlockedItemIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] // 기본 아이템 해금
+        characters: initialCharacters,
+        scenarios: initialScenarios, // 이제 시나리오가 비어있지 않습니다!
+        unlockedItemIds: []
     };
 
-    // 2. 배열에 추가 및 인덱스 설정
-    if (!Array.isArray(parties)) parties = []; 
+    if (!Array.isArray(parties)) parties = [];
     parties.push(newParty);
     currentPartyIndex = parties.length - 1;
 
-    // [추가] 현재 메모리 변수들도 새 파티 데이터로 즉시 교체 (중요)
+    // 3. 현재 메모리에 즉시 반영
     charData = initialCharacters;
-    scenarios = {};
-    if (typeof unlockedItemIds !== 'undefined') unlockedItemIds = newParty.unlockedItemIds;
+    scenarios = initialScenarios; // 화면에 바로 그리도록 할당
+    unlockedItemIds = newParty.unlockedItemIds;
 
-    // 3. UI 업데이트
-    document.getElementById('display-party-name').innerText = name;
-    
-    // 4. 저장 (로컬 + 서버)
     saveAllParties(); 
-    
-    // 5. 정리 및 화면 이동
-    input.value = '';
     closeModal('modal-party-name');
     renderPartyList(); 
     
-    // 6. 바로 해당 파티의 직업 선택 화면으로 진입
-    selectParty(currentPartyIndex);
-    
-    console.log("파티 생성 및 서버 전송 시도 완료");
-}
-function renderPartyList() {
-    const listContainer = document.getElementById('party-list');
-    if (!listContainer) return;
-    listContainer.innerHTML = '';
-
-    if (parties.length === 0) {
-        listContainer.innerHTML = '<li style="padding: 15px; color: #666; font-size: 0.8rem; text-align: center;">생성된 파티가 없습니다.</li>';
-        return;
-    }
-
-    parties.forEach((party, index) => {
-        const li = document.createElement('li');
-        li.style = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);";
-        li.innerHTML = `
-            <div onclick="selectParty(${index})" style="padding: 15px; color: var(--accent); flex: 1; cursor: pointer; font-size: 0.9rem;">
-                🏰 ${party.partyName}
-            </div>
-            <div onclick="deleteParty(${index})" style="padding: 15px; color: #ff4444; cursor: pointer; font-weight: bold; font-size: 1.1rem;">
-                ✕
-            </div>
-        `;
-        listContainer.appendChild(li);
-    });
+    // UI 즉시 업데이트
+    if (typeof renderScenarios === 'function') renderScenarios();
+    if (typeof selectParty === 'function') selectParty(currentPartyIndex);
 }
 
 function selectParty(index) {
@@ -1347,27 +1321,28 @@ function executePartyDelete() {
     }
 }
 function saveAllParties() {
-    // [수정] 현재 선택된 파티가 배열 범위 내에 실제로 존재할 때만 업데이트
+    // [잠금] 저장 중 서버 신호 무시
+    if (typeof isLocalUpdate !== 'undefined') isLocalUpdate = true;
+
     if (currentPartyIndex !== null && parties && parties[currentPartyIndex]) {
         parties[currentPartyIndex].characters = charData;
         parties[currentPartyIndex].scenarios = scenarios;
-        // 해금 아이템도 파티별 저장에 포함
         if (typeof unlockedItemIds !== 'undefined') {
             parties[currentPartyIndex].unlockedItemIds = unlockedItemIds;
         }
     }
 
-    // 로컬스토리지 저장
     localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
 
-    // 서버 저장
     if (typeof database !== 'undefined') {
         database.ref('parties/').set(parties)
         .then(() => { console.log("서버 저장 완료"); })
-        .catch((error) => { console.error("서버 저장 실패:", error); });
+        .catch((error) => { 
+            if (typeof isLocalUpdate !== 'undefined') isLocalUpdate = false;
+            console.error("저장 실패:", error); 
+        });
     }
 }
-
 function showScreen(id) {
     // 1. 'screen' 혹은 'section' 태그를 가진 모든 요소를 찾아서 숨김
     const allScreens = document.querySelectorAll('.screen, section');
@@ -1524,39 +1499,29 @@ function calcDifficulty(diff, btn) {
             }
         }
 
-     function confirmPlayerName(job) {
+function confirmPlayerName(job) {
     const inputEl = document.getElementById('input-' + job);
     if (!inputEl) return;
-    
     const name = inputEl.value.trim();
     if (!name) return;
 
-    // [방어 코드 추가] 파티가 삭제되었거나 데이터가 없는 경우 실행 차단
-    if (!charData || !charData[job]) {
-        console.warn(`${job}의 데이터를 찾을 수 없습니다.`);
+    // 보정 로직 없이 그대로 사용
+    if (!charData[job]) {
+        alert(`'${job}' 데이터를 찾을 수 없습니다. 현재 키: ${Object.keys(charData)}`);
         return;
     }
 
-    // 데이터 저장
     charData[job].playerName = name;
-    currentJob = job;
     
-    // UI 반영
-    if (typeof syncJobCard === 'function') syncJobCard(job);
+    // UI 업데이트 및 저장
+    syncJobCard(job);
+    saveAllData(); // 또는 saveAllParties();
+    
     const card = document.getElementById('card-' + job);
     if (card) card.classList.remove('expanded');
     
-    // 저장 시도
-    if (typeof saveAllData === 'function') {
-        saveAllData();
-    } else if (typeof saveAllParties === 'function') {
-        saveAllParties(); // 함수명이 다를 경우를 대비
-    }
-
-    // 상세 시트 열기
-    if (typeof openDetailSheet === 'function') {
-        openDetailSheet(job);
-    }
+    // 바로 상세 시트 열기
+    openDetailSheet(job);
 }
 
 function openDetailSheet(job) {
@@ -1655,7 +1620,7 @@ currentJob = job;
     closeModal('modal-char-sheet');
 }
 
-// [수정] 함수 선언부와 시작 중괄호({)를 명확히 추가했습니다.
+
 function addStatOnBlur(type) {
     if (!currentJob || !charData[currentJob]) return;
 
@@ -2424,24 +2389,27 @@ function handleScenarioClick(id) {
 
 // 1. 시나리오 화면 그리기
 function renderScenarios() {
-    const container = document.getElementById('scenario-grid');
+const container = document.getElementById('scenario-grid');
     if (!container) {
         console.error("ID가 'scenario-grid'인 엘리먼트를 찾을 수 없습니다.");
         return;
     }
     container.innerHTML = '';
 
-    // scenarios 데이터가 없으면 실행 중단
-    if (!scenarios) return;
+    // scenarios 데이터가 없으면 안내 문구 출력
+    if (!scenarios || Object.keys(scenarios).length === 0) {
+        container.innerHTML = '<div style="color:#888; text-align:center; padding:50px;">등록된 시나리오가 없습니다.</div>';
+        return;
+    }
 
     Object.keys(scenarios).forEach(id => {
         const s = scenarios[id];
-        
-        // 데이터 방어 로직
-        if (!s || typeof s !== 'object' || !s.state) {
-            return; 
-        }
+        if (!s) return; // 데이터가 비어있으면 패스
 
+        // [핵심 보정] state가 없으면 completed 여부에 따라 강제 할당
+        if (!s.state) {
+            s.state = s.completed ? 'completed' : 'unlocked';
+        }
         const card = document.createElement('div');
         const isDone = s.state === 'completed';
         const isLocked = s.state === 'locked';
@@ -2509,12 +2477,12 @@ function renderScenarios() {
             <div style="margin-top:20px;">
                 ${s.state === 'unlocked' ? 
                     `<button class="btn-confirm" style="width:100%; background:#8b4513; border:1px solid #ffb84d; padding:12px; font-weight:bold; cursor:pointer; color:white; border-radius:6px;" 
-                               onclick="confirmClear(${id})">시나리오 클리어</button>` 
+                               onclick="confirmClear('${id}')">시나리오 클리어</button>` 
                     : ''
                 }
                 ${isLocked ? 
                     `<button class="btn-unlock" style="width:100%; background:rgba(255,255,255,0.05); border:1px solid #444; padding:12px; font-weight:bold; cursor:pointer; color:#888; border-radius:6px; transition:0.2s;" 
-                               onclick="unlockScenario(${id})">🔒 시나리오 해금하기</button>` 
+                               onclick="unlockScenario('${id}')">🔒 시나리오 해금하기</button>` 
                     : ''
                 }
             </div>
@@ -3050,37 +3018,24 @@ function closeRewardModal() {
 
 function saveAllData() {
     if (currentPartyIndex !== null && parties[currentPartyIndex]) {
-        // [수정] 로컬 업데이트 시작됨을 표시
-        isLocalUpdate = true;
+        window.isLocalUpdate = true; // 전역 플래그 설정
 
-        // 1. 로컬 변수 데이터 동기화
         parties[currentPartyIndex].characters = charData;
         parties[currentPartyIndex].scenarios = scenarios;
         parties[currentPartyIndex].unlockedItemIds = unlockedItemIds;
 
-        // 2. 브라우저 백업 (기존 로직)
-        localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
-
-        // 3. [추가] 실시간 서버(Firebase) 저장
-        if (typeof database !== 'undefined') {
-            database.ref('parties/' + currentPartyIndex).set(parties[currentPartyIndex])
-                .then(() => {
-                    console.log("서버 동기화 성공!");
-                    // [수정] 저장이 완료되고 서버 응답을 받은 후, 잠시 뒤에 플래그 해제
-                    setTimeout(() => { isLocalUpdate = false; }, 500);
-                })
-                .catch((error) => {
-                    console.error("서버 저장 실패:", error);
-                    isLocalUpdate = false;
-                });
-        }
-        
-        console.log(`[${parties[currentPartyIndex].partyName}] 파티 데이터 통합 저장됨.`);
-    } else {
-        localStorage.setItem('gloomhaven_scenarios', JSON.stringify(scenarios));
+        database.ref('parties/' + currentPartyIndex).set(parties[currentPartyIndex])
+            .then(() => {
+                console.log("서버 동기화 성공");
+                // 서버 저장이 완전히 끝난 후 1초 뒤에 플래그 해제 (매우 중요)
+                setTimeout(() => { window.isLocalUpdate = false; }, 1000);
+            })
+            .catch((err) => {
+                console.error("저장 실패", err);
+                window.isLocalUpdate = false;
+            });
     }
 }
-
 
 // [1. 데이터 초기화] 카드 범위를 1~22로 강제 제한
 let cityEventState = (function() {
@@ -3234,106 +3189,65 @@ function openCityEventMode() {
 
 window.onload = function() {
     database.ref('parties/').on('value', function(snapshot) {
-        // [방어] 로컬 업데이트 중이면 리스너 중단
-        if (typeof isLocalUpdate !== 'undefined' && isLocalUpdate) {
-            isLocalUpdate = false; 
-            return;
-        }
+        // 1. 로컬 업데이트 중이면 리스너 중단
+        if (window.isLocalUpdate) return;
 
         const data = snapshot.val();
-        // 서버 데이터를 배열 형태로 변환
-        const remoteParties = data ? (Array.isArray(data) ? data : Object.values(data)) : [];
+        if (!data) return;
+
+        // 2. 전체 파티 데이터 갱신
+        parties = Array.isArray(data) ? data : Object.values(data);
         
-        // 1. [강제 퇴장 로직] 파티 삭제 또는 인덱스 꼬임 감지
-        if (currentPartyIndex !== null) {
-            // 서버 데이터가 아예 없거나, 내가 보고 있던 인덱스가 사라졌을 때
-            if (!data || !data[currentPartyIndex] || remoteParties.length <= currentPartyIndex) {
-                console.warn("⚠️ 참여 중인 파티가 삭제되어 목록으로 이동합니다.");
-                
-                currentPartyIndex = null;
-                charData = {};
-                scenarios = {};
-                unlockedItemIds = [];
-                parties = remoteParties;
+        // currentPartyIndex가 유효한지 확인
+        if (currentPartyIndex !== null && data[currentPartyIndex]) {
+            const currentParty = data[currentPartyIndex];
 
-                if (typeof showScreen === 'function') showScreen('screen-party-select');
-                if (typeof renderPartyList === 'function') renderPartyList();
-                
-                localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
-                return; 
+            // 3. 시나리오 데이터 복구 (수정된 핵심 로직)
+            // 서버에 시나리오 데이터가 실제로 존재할 때만 로컬 변수를 덮어씁니다.
+            if (currentParty.scenarios && Object.keys(currentParty.scenarios).length > 0) {
+                scenarios = currentParty.scenarios;
+            } else {
+                // 서버에 데이터가 없거나 비어있다면, 
+                // 코드 상단에 정의된 기본 시나리오 25개를 그대로 유지합니다.
+                console.log("서버 데이터가 비어있어 코드 기본 시나리오를 유지합니다.");
             }
-        }
 
-        // 2. 파티 목록 데이터 동기화
-        parties = remoteParties;
-        if (typeof renderPartyList === 'function') renderPartyList(); 
-
-        // 3. [상세 데이터 갱신] 파티 내부에 있을 때만 실행
-        if (currentPartyIndex !== null && parties[currentPartyIndex]) {
-            const currentParty = parties[currentPartyIndex];
+            // 4. 캐릭터 데이터 복구
+            if (currentParty.characters) {
+                Object.keys(charData).forEach(job => {
+                    if (currentParty.characters[job]) {
+                        charData[job] = currentParty.characters[job];
+                    }
+                });
+            }
             
-            // 데이터 할당
-            charData = currentParty.characters || {};
-            scenarios = currentParty.scenarios || {};
             unlockedItemIds = currentParty.unlockedItemIds || [];
 
-            // --- UI 갱신 (에러 발생 시에도 시나리오 목록은 뜨도록 try-catch 사용) ---
-
-            // (1) 시나리오 목록 렌더링 (중요도가 높으므로 먼저 실행)
-            try {
-                if (typeof renderScenarios === 'function') {
-                    renderScenarios();
-                }
-            } catch (e) {
-                console.error("시나리오 렌더링 실패:", e);
+            // 5. UI 강제 갱신
+            if (typeof renderScenarios === 'function') {
+                renderScenarios(); 
             }
 
-            // (2) 메인 직업 카드들 갱신
-            Object.keys(charData).forEach(job => {
-                try {
-                    if (typeof syncJobCard === 'function') syncJobCard(job);
-                } catch (e) {
-                    console.error(`${job} 카드 갱신 에러:`, e);
-                }
-            });
+            if (typeof renderJobCards === 'function') {
+                renderJobCards();
+            } else {
+                const jobs = ['적위병', '도끼투척수', '철거전문가', '공허감시자'];
+                jobs.forEach(job => {
+                    const tagEl = document.getElementById('tag-' + job);
+                    const cardEl = document.getElementById('card-' + job);
+                    const name = charData[job] ? charData[job].playerName : "";
 
-            // (3) 캐릭터 상세 시트 실시간 갱신 (열려있을 때만)
-            if (typeof currentJob !== 'undefined' && currentJob && charData[currentJob]) {
-                try {
-                    const c = charData[currentJob];
-                    const gIn = document.getElementById('gold-input') || document.getElementById('input-gold');
-                    const eIn = document.getElementById('exp-input') || document.getElementById('input-exp');
-                    const pDisp = document.getElementById('perk-count') || document.getElementById('display-perk-points');
-
-                    if (gIn && document.activeElement !== gIn) gIn.value = c.gold || 0;
-                    if (eIn && document.activeElement !== eIn) eIn.value = c.exp || 0;
-                    if (pDisp) pDisp.innerText = c.perkPoints || 0;
-
-                    if (typeof updateGoldDisplay === 'function') updateGoldDisplay();
-                    if (typeof updateExpBar === 'function') updateExpBar();
-                    if (typeof renderBagItems === 'function') renderBagItems('전체');
-                } catch (e) {
-                    console.warn("상세 시트 동기화 중 에러 발생:", e);
-                }
-            }
-
-            // (4) 상점 팝업 갱신
-            const shopPopup = document.getElementById('popup-shop');
-            if (shopPopup && shopPopup.classList.contains('active')) {
-                try {
-                    if (typeof renderShopItems === 'function') {
-                        const activeBtn = document.querySelector('#popup-shop .js-category-bar button.active');
-                        const currentFilter = activeBtn ? activeBtn.innerText : '전체';
-                        renderShopItems(currentFilter); 
+                    if (tagEl) tagEl.innerText = name || '선택 가능';
+                    if (cardEl) {
+                        if (name) cardEl.classList.add('occupied');
+                        else cardEl.classList.remove('occupied');
                     }
-                } catch (e) {
-                    console.error("상점 갱신 실패:", e);
-                }
+                    if (typeof syncJobCard === 'function') syncJobCard(job);
+                });
             }
+            
+            if (typeof updateDifficultyBar === 'function') updateDifficultyBar();
         }
-
-        // 마지막으로 브라우저 로컬 저장소에 백업
-        localStorage.setItem('gloomhaven_parties', JSON.stringify(parties));
     });
 };
 </script>
