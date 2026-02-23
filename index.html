@@ -1535,25 +1535,25 @@ function saveAllParties() {
         });
     }
 }
+// 추천하는 showScreen 수정 방식
 function showScreen(id) {
-    // 1. 'screen' 혹은 'section' 태그를 가진 모든 요소를 찾아서 숨김
+    // 1. 모든 스크린에서 hidden 추가
     const allScreens = document.querySelectorAll('.screen, section');
     allScreens.forEach(s => {
-        s.classList.add('hidden'); // 클래스 추가
-        s.style.display = 'none';  // 인라인 스타일로 한 번 더 확실히!
+        s.classList.add('hidden');
+        s.style.display = ''; // 인라인 스타일 제거 (CSS가 제어하게 함)
     });
 
-    // 2. 우리가 보여주고 싶은 대상만 노출
+    // 2. 대상만 hidden 제거
     const target = document.getElementById(id);
     if (target) {
         target.classList.remove('hidden');
-        target.style.display = 'flex'; // 혹은 'block'
-        target.style.flexDirection = 'column';
+        // 필요한 경우에만 인라인 스타일 사용
+        if(id === 'screen-job-select') target.style.display = 'flex'; 
     }
-    
-    // 3. 화면 전환 시 항상 맨 위로 스크롤
     window.scrollTo(0, 0);
 }
+
 function openModal(id) { 
     const modal = document.getElementById(id);
     if (modal) modal.classList.remove('hidden'); 
