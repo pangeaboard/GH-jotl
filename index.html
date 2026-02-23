@@ -1189,21 +1189,56 @@ let scenarios = {
 	
 	
 	
-	let unlockedItemIds = [];
-        let activeExpandedJob = null;
-        let currentJob = '';
-	let parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
-	let currentPartyIndex = null; 
-	let isLocalUpdate = false; 
+// [1] 변수 선언부
+let unlockedItemIds = [];
+let activeExpandedJob = null;
+let currentJob = '';
+let parties = JSON.parse(localStorage.getItem('gloomhaven_parties')) || [];
+let currentPartyIndex = null; 
+let isLocalUpdate = false; 
 
+function renderPartyList() {
+    const listContainer = document.getElementById('party-list');
+    if (!listContainer) return;
+    
+    listContainer.innerHTML = '';
 
-// [통합 및 수정된 파티 생성 함수]
+    if (!parties || parties.length === 0) {
+        listContainer.innerHTML = '<li style="padding: 15px; color: #666; font-size: 0.8rem; text-align: center;">생성된 파티가 없습니다.</li>';
+        return;
+    }
+
+    parties.forEach((party, index) => {
+        const li = document.createElement('li');
+        li.style = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);";
+        
+        li.innerHTML = `
+            <div onclick="window.selectParty(${index})" 
+                 style="padding: 15px; color: var(--accent); flex: 1; cursor: pointer; font-size: 0.9rem;">
+                🏰 ${party.partyName}
+            </div>
+            <div onclick="window.deleteParty(${index})" 
+                 style="padding: 15px; color: #ff4444; cursor: pointer; font-weight: bold; font-size: 1.1rem; width: 45px; text-align: center;">
+                ✕
+            </div>
+        `;
+        listContainer.appendChild(li);
+    });
+}
+window.renderPartyList = renderPartyList;
+
+/**
+ * 3. 파티 생성 확인 함수 (핵심 수정: 데이터 오염 방지)
+ */
 function confirmPartyName() {
     const input = document.getElementById('input-party-name');
-    const name = input.value.trim();
+    const name = input ? input.value.trim() : "";
     if (!name) { alert("파티 이름을 입력해주세요."); return; }
 
-    // 1. [명칭 수정] 파괴전사/공허수호자 등의 옛날 이름을 완전히 제거했습니다.
+    // [중요] 기존 메모리에 남은 charData를 완전히 비움 (이전 파티 이름 잔상 제거)
+    charData = {};
+
+    // 100% 새로운 객체로 생성 (공동 참조 방지)
     const initialCharacters = {
         "적위병": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
         "공허감시자": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} },
@@ -1211,16 +1246,17 @@ function confirmPartyName() {
         "도끼투척수": { playerName: '', exp: 0, gold: 0, lv: 1, inventory: [], perkPoints: 0, battleGoals: [false, false, false], checkedPerks: {} }
     };
 
-    // 2. [시나리오 복구] {} 대신 상단에 선언된 25개 기본 시나리오 데이터를 복사해 넣습니다.
-    // JSON.parse(JSON.stringify(scenarios))를 사용해 원본 데이터의 복사본을 만듭니다.
-    const initialScenarios = (typeof scenarios !== 'undefined' && Object.keys(scenarios).length > 0) 
-                             ? JSON.parse(JSON.stringify(scenarios)) 
-                             : {};
+    let initialScenarios = {};
+    if (typeof scenarios !== 'undefined' && Object.keys(scenarios).length > 0) {
+        // Deep Copy: 원본 데이터가 아닌 '복사본'을 파티에 할당
+        initialScenarios = JSON.parse(JSON.stringify(scenarios));
+    }
 
     const newParty = {
         partyName: name,
-        characters: initialCharacters,
-        scenarios: initialScenarios, // 이제 시나리오가 비어있지 않습니다!
+        // JSON 변환을 통해 메모리 주소를 완전히 끊어버림 (데이터 전이 방지)
+        characters: JSON.parse(JSON.stringify(initialCharacters)),
+        scenarios: initialScenarios,
         unlockedItemIds: []
     };
 
@@ -1228,99 +1264,98 @@ function confirmPartyName() {
     parties.push(newParty);
     currentPartyIndex = parties.length - 1;
 
-    // 3. 현재 메모리에 즉시 반영
-    charData = initialCharacters;
-    scenarios = initialScenarios; // 화면에 바로 그리도록 할당
-    unlockedItemIds = newParty.unlockedItemIds;
+    // 현재 세션 변수 업데이트
+    charData = newParty.characters;
+    window.scenarios = newParty.scenarios;
+    unlockedItemIds = [];
 
     saveAllParties(); 
-    closeModal('modal-party-name');
-    renderPartyList(); 
     
-    // UI 즉시 업데이트
-    if (typeof renderScenarios === 'function') renderScenarios();
-    if (typeof selectParty === 'function') selectParty(currentPartyIndex);
-}
+    if (typeof closeModal === 'function') closeModal('modal-party-name');
+    if (input) input.value = ''; // 입력창 비우기
 
+    // UI 동기화
+    window.renderPartyList();
+    window.selectParty(currentPartyIndex);
+}
+window.confirmPartyName = confirmPartyName;
+
+/**
+ * 4. 파티 선택 함수
+ */
 function selectParty(index) {
-    // 1. 현재 선택된 파티 인덱스를 전역 변수에 저장 (가장 중요)
+    if (index === null || !parties[index]) return;
+    
     currentPartyIndex = index;
-    
     const selected = parties[index];
-    
-    // 2. 전역 데이터 변수를 선택된 파티의 데이터로 완전 교체
-    // (데이터가 없을 경우를 대비해 기본값 {}를 설정합니다)
-    charData = selected.characters || {};
-    scenarios = selected.scenarios || {};
-    unlockedItemIds = selected.unlockedItemIds || [];
 
-    // 3. UI 갱신
-    document.getElementById('display-party-name').innerText = selected.partyName;
-    
-    // 4. 화면 전환
-    showScreen('screen-job-select');
+    // 선택된 파티의 데이터를 전역 변수에 할당 (참조 끊기 위해 parse-stringify 권장)
+    charData = JSON.parse(JSON.stringify(selected.characters || {}));
+    window.scenarios = JSON.parse(JSON.stringify(selected.scenarios || {}));
+    unlockedItemIds = JSON.parse(JSON.stringify(selected.unlockedItemIds || []));
 
-    // 5. [추가] 진입 시점에 캐릭터 카드 UI 강제 동기화
-    // 이 코드가 있어야 폰에서도 이름이 즉시 보입니다.
+    const displayEl = document.getElementById('display-party-name');
+    if (displayEl) displayEl.innerText = selected.partyName;
+    
+    if (typeof showScreen === 'function') showScreen('screen-job-select');
+
+    // 캐릭터 카드 다시 그리기 (이름 잔상 제거용)
+    if (typeof renderJobCards === 'function') {
+        renderJobCards();
+    }
+
+    // 기타 동기화 로직
     Object.keys(charData).forEach(job => {
-        if (typeof syncJobCard === 'function') {
-            syncJobCard(job);
-        }
+        if (typeof syncJobCard === 'function') syncJobCard(job);
     });
-
-    renderScenarios();
-    console.log(`[${selected.partyName}] 파티 진입 완료 (Index: ${index})`);
+    if (typeof renderScenarios === 'function') renderScenarios();
 }
+window.selectParty = selectParty;
 
-let partyIndexToDelete = null; // 삭제 대상을 잠시 저장할 변수
-
-// 1. 삭제 모달을 띄우는 함수
+/**
+ * 5. 파티 삭제 로직
+ */
 function deleteParty(index) {
-    partyIndexToDelete = index; // 삭제할 인덱스 저장
+    partyIndexToDelete = index;
     const partyName = parties[index].partyName;
     
-    // 모달 안의 문구 변경
-    document.getElementById('delete-party-msg').innerHTML = 
-        `🏰 <b style="color:var(--accent)">${partyName}</b> 파티를<br>정말 삭제하시겠습니까?`;
-    
-    // 삭제 버튼에 클릭 이벤트 연결 (한 번만 등록되도록 처리)
-    const deleteBtn = document.getElementById('btn-party-delete-final');
-    deleteBtn.onclick = executePartyDelete; 
-    
-    openModal('modal-delete-party-confirm');
-}
-
-// 2. 실제로 삭제를 실행하는 함수
-function executePartyDelete() {
-    if (partyIndexToDelete !== null) {
-        // [수정] 삭제하려는 파티가 현재 내가 보고 있는 파티일 경우
-        if (currentPartyIndex === partyIndexToDelete) {
-            currentPartyIndex = null;
-            // 폰 메모리에 남은 유령 데이터들을 삭제하여 좀비 부활 방지
-            charData = {};
-            scenarios = {};
-            if (typeof unlockedItemIds !== 'undefined') unlockedItemIds = [];
-            
-            // 파티가 사라졌으니 메인 화면(파티 선택)으로 이동
-            if (typeof showScreen === 'function') showScreen('screen-party-select');
-        } else if (currentPartyIndex > partyIndexToDelete) {
-            // 삭제된 항목보다 뒤에 있는 파티를 보고 있었다면 인덱스 하나 당김
-            currentPartyIndex--;
-        }
-
-        parties.splice(partyIndexToDelete, 1); // 배열에서 삭제
-        saveAllParties();     // 서버/로컬 저장 (여기서 삭제된 상태가 서버로 전송됨)
-        renderPartyList();    // 목록 갱신
-        
-        closeModal('modal-delete-party-confirm');
-        partyIndexToDelete = null; // 변수 초기화
-        
-        if (typeof showAlert === 'function') {
-            showAlert("삭제 완료", "파티가 안전하게 삭제되었습니다.");
-        }
+    const msgBox = document.getElementById('delete-party-msg');
+    if (msgBox) {
+        msgBox.innerHTML = `🏰 <b style="color:var(--accent)">${partyName}</b> 파티를<br>정말 삭제하시겠습니까?`;
     }
+    
+    const deleteBtn = document.getElementById('btn-party-delete-final');
+    if (deleteBtn) deleteBtn.onclick = executePartyDelete; 
+    
+    if (typeof openModal === 'function') openModal('modal-delete-party-confirm');
 }
-function saveAllParties() {
+window.deleteParty = deleteParty;
+
+function executePartyDelete() {
+    if (partyIndexToDelete === null) return;
+
+    // 현재 보고 있는 파티를 삭제하는 경우 메모리 완전 초기화
+    if (currentPartyIndex === partyIndexToDelete) {
+        currentPartyIndex = null;
+        charData = {};
+        window.scenarios = {};
+        unlockedItemIds = [];
+        if (typeof showScreen === 'function') showScreen('screen-home');
+    } else if (currentPartyIndex > partyIndexToDelete) {
+        currentPartyIndex--;
+    }
+
+    parties.splice(partyIndexToDelete, 1);
+    saveAllParties(); 
+    window.renderPartyList();
+    
+    if (typeof closeModal === 'function') closeModal('modal-delete-party-confirm');
+    partyIndexToDelete = null;
+    
+    if (typeof showAlert === 'function') {
+        showAlert("삭제 완료", "파티 데이터가 영구적으로 삭제되었습니다.");
+    }
+}function saveAllParties() {
     // [잠금] 저장 중 서버 신호 무시
     if (typeof isLocalUpdate !== 'undefined') isLocalUpdate = true;
 
@@ -2371,7 +2406,7 @@ function showAlert(title, message, onConfirm = null) {
 
 // 시나리오 클릭 통합 핸들러
 function handleScenarioClick(id) {
-    const s = scenarioData[id];
+    const s = scenarios[id];
     if (!s) return;
 
     if (s.state === 'locked') {
